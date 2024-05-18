@@ -1,5 +1,7 @@
 use crate::constants::FloatConst;
+use crate::newtypes::current::Current;
 use crate::newtypes::impedance::Impedance;
+use crate::newtypes::voltage::Voltage;
 use crate::utils::freq_to_angular;
 use num::complex::Complex;
 use num::traits::{ConstOne, ConstZero};
@@ -9,6 +11,12 @@ where
     T: FloatConst + ConstOne + ConstZero,
 {
     fn impedance(&self, freq: T) -> Impedance<T>;
+    fn calc_current(&self, v: Voltage<T>, freq: T) -> Current<T> {
+        v / self.impedance(freq)
+    }
+    fn calc_voltage(&self, i: Current<T>, freq: T) -> Voltage<T> {
+        i * self.impedance(freq)
+    }
 }
 
 pub struct Resistor<T> {
