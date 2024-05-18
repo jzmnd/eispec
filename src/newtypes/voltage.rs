@@ -1,6 +1,7 @@
 use num::complex::Complex;
 use num::{Float, Num};
 use std::fmt;
+use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
 use crate::newtypes::current::Current;
@@ -15,7 +16,7 @@ pub struct Voltage<T>(pub(super) Complex<T>);
 
 impl<T> Voltage<T> {
     pub fn new(re: T, im: T) -> Self {
-        Voltage(Complex::new(re, im))
+        Self(Complex::new(re, im))
     }
 }
 
@@ -30,7 +31,11 @@ where
 
 impl<T: Float> Voltage<T> {
     pub fn from_polar(r: T, theta: T) -> Self {
-        Voltage(Complex::from_polar(r, theta))
+        Self(Complex::from_polar(r, theta))
+    }
+
+    pub fn finv(self) -> Self {
+        Self(self.0.finv())
     }
 }
 
@@ -60,6 +65,17 @@ impl<T: Clone + Num> Div for Voltage<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
+    }
+}
+
+// Sum derives
+impl<T: Clone + Num> Sum for Voltage<T> {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        let vzero = Voltage::new(T::zero(), T::zero());
+        iter.fold(vzero, |acc, c| acc + c)
     }
 }
 

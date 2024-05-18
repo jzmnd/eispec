@@ -1,6 +1,7 @@
 use num::complex::Complex;
 use num::{Float, Num};
 use std::fmt;
+use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
 use crate::constants::FloatConst;
@@ -15,7 +16,7 @@ pub struct Impedance<T>(pub(super) Complex<T>);
 
 impl<T> Impedance<T> {
     pub fn new(re: T, im: T) -> Self {
-        Impedance(Complex::new(re, im))
+        Self(Complex::new(re, im))
     }
 }
 
@@ -30,7 +31,7 @@ where
 
 impl<T: Float + FloatConst> Impedance<T> {
     pub fn from_polar(r: T, theta: T) -> Self {
-        Impedance(Complex::from_polar(r, theta))
+        Self(Complex::from_polar(r, theta))
     }
 
     pub fn to_polar(self) -> (T, T) {
@@ -50,6 +51,10 @@ impl<T: Float + FloatConst> Impedance<T> {
         let r = g.recip();
         let im = -(omega * cs).recip();
         Self::new(r, im)
+    }
+
+    pub fn finv(self) -> Self {
+        Self(self.0.finv())
     }
 }
 
@@ -79,6 +84,17 @@ impl<T: Clone + Num> Div for Impedance<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
+    }
+}
+
+// Sum derives
+impl<T: Clone + Num> Sum for Impedance<T> {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        let zzero = Impedance::new(T::zero(), T::zero());
+        iter.fold(zzero, |acc, c| acc + c)
     }
 }
 

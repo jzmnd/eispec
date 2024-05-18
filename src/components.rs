@@ -72,8 +72,7 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
-        let one = Complex::<T>::ONE;
-        let z = one / Complex::from(self.q0) * (j * omega).powf(self.n);
+        let z = Complex::from(self.q0) * (j * omega).powf(self.n).finv();
         Impedance::new(z.re, z.im)
     }
 }
