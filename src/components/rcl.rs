@@ -1,0 +1,47 @@
+use num::traits::{ConstOne, ConstZero};
+
+use crate::components::Component;
+use crate::constants::FloatConst;
+use crate::newtypes::Impedance;
+use crate::utils::freq_to_angular;
+
+pub struct Resistor<T> {
+    pub r0: T,
+}
+
+impl<T> Component<T> for Resistor<T>
+where
+    T: FloatConst + ConstOne + ConstZero,
+{
+    fn impedance(&self, _freq: T) -> Impedance<T> {
+        Impedance::new(self.r0, T::zero())
+    }
+}
+
+pub struct Capacitor<T> {
+    pub c0: T,
+}
+
+impl<T> Component<T> for Capacitor<T>
+where
+    T: FloatConst + ConstOne + ConstZero,
+{
+    fn impedance(&self, freq: T) -> Impedance<T> {
+        let omega = freq_to_angular(freq);
+        Impedance::new(T::zero(), -(omega * self.c0).recip())
+    }
+}
+
+pub struct Inductor<T> {
+    pub l0: T,
+}
+
+impl<T> Component<T> for Inductor<T>
+where
+    T: FloatConst + ConstOne + ConstZero,
+{
+    fn impedance(&self, freq: T) -> Impedance<T> {
+        let omega = freq_to_angular(freq);
+        Impedance::new(T::zero(), omega * self.l0)
+    }
+}
