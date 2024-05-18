@@ -1,11 +1,8 @@
 use crate::constants::FloatConst;
 use crate::newtypes::impedance::Impedance;
+use crate::utils::freq_to_angular;
 use num::complex::Complex;
 use num::traits::{ConstOne, ConstZero};
-
-pub fn freq_to_angular<T: FloatConst>(freq: T) -> T {
-    T::PI_2 * freq
-}
 
 pub trait Component<T>
 where
