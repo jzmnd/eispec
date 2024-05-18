@@ -34,7 +34,7 @@ where
 {
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
-        Impedance::new(T::zero(), (omega * self.c0).recip())
+        Impedance::new(T::zero(), -(omega * self.c0).recip())
     }
 }
 
