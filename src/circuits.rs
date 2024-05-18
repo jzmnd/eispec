@@ -1,7 +1,8 @@
+use num::traits::{ConstOne, ConstZero};
+
 use crate::components::Component;
 use crate::constants::FloatConst;
-use crate::newtypes::impedance::Impedance;
-use num::traits::{ConstOne, ConstZero};
+use crate::newtypes::Impedance;
 
 pub struct ParallelCircuit<T>
 where

@@ -4,9 +4,7 @@ use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
-use crate::newtypes::impedance::Impedance;
-use crate::newtypes::power::Power;
-use crate::newtypes::voltage::Voltage;
+use crate::newtypes::{Impedance, Power, Voltage};
 
 ///
 /// Current (A)

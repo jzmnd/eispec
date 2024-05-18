@@ -1,10 +1,9 @@
-use crate::constants::FloatConst;
-use crate::newtypes::current::Current;
-use crate::newtypes::impedance::Impedance;
-use crate::newtypes::voltage::Voltage;
-use crate::utils::freq_to_angular;
 use num::complex::Complex;
 use num::traits::{ConstOne, ConstZero};
+
+use crate::constants::FloatConst;
+use crate::newtypes::{Current, Impedance, Voltage};
+use crate::utils::freq_to_angular;
 
 pub trait Component<T>
 where
