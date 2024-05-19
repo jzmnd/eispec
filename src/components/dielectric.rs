@@ -6,6 +6,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 use crate::utils::freq_to_angular;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct HavriliakNegami<T> {
     pub rinf: T,
     pub r0: T,
@@ -21,14 +22,15 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let jot = j * omega * self.tau;
         let one = Complex::<T>::ONE;
-        let zc = Complex::from(self.r0)
-            / (one + (j * omega * self.tau).powf(self.alpha)).powf(self.beta);
+        let zc = Complex::from(self.r0) / (one + jot.powf(self.alpha)).powf(self.beta);
         let z = zc + self.rinf;
         Impedance::new(z.re, z.im)
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Debye<T> {
     pub rinf: T,
     pub r0: T,
@@ -42,13 +44,15 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let jot = j * omega * self.tau;
         let one = Complex::<T>::ONE;
-        let zc = Complex::from(self.r0) / (one + (j * omega * self.tau));
+        let zc = Complex::from(self.r0) / (one + jot);
         let z = zc + self.rinf;
         Impedance::new(z.re, z.im)
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ColeCole<T> {
     pub rinf: T,
     pub r0: T,
@@ -63,13 +67,15 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let jot = j * omega * self.tau;
         let one = Complex::<T>::ONE;
-        let zc = Complex::from(self.r0) / (one + (j * omega * self.tau).powf(self.alpha));
+        let zc = Complex::from(self.r0) / (one + jot.powf(self.alpha));
         let z = zc + self.rinf;
         Impedance::new(z.re, z.im)
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ColeDavidson<T> {
     pub rinf: T,
     pub r0: T,
@@ -84,8 +90,9 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let jot = j * omega * self.tau;
         let one = Complex::<T>::ONE;
-        let zc = Complex::from(self.r0) / (one + (j * omega * self.tau)).powf(self.beta);
+        let zc = Complex::from(self.r0) / (one + jot).powf(self.beta);
         let z = zc + self.rinf;
         Impedance::new(z.re, z.im)
     }

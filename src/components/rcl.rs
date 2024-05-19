@@ -5,6 +5,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 use crate::utils::freq_to_angular;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Resistor<T> {
     pub r0: T,
 }
@@ -18,6 +19,7 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Capacitor<T> {
     pub c0: T,
 }
@@ -32,6 +34,7 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Inductor<T> {
     pub l0: T,
 }

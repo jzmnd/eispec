@@ -6,6 +6,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 use crate::utils::freq_to_angular;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Warburg<T> {
     pub aw: T,
 }
@@ -17,11 +18,13 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
-        let z = Complex::from(T::SQRT_2 * self.aw) / (j * omega).sqrt();
+        let sqrtjo = (j * omega).sqrt();
+        let z = Complex::from(T::SQRT_2 * self.aw) / sqrtjo;
         Impedance::new(z.re, z.im)
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct WarburgShort<T> {
     pub aw: T,
     pub d: T,
@@ -35,12 +38,14 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let sqrtjo = (j * omega).sqrt();
         let b = self.d / self.diffusion_coeff.sqrt();
-        let z = Complex::from(self.aw) * ((j * omega).sqrt() * b).tanh() / (j * omega).sqrt();
+        let z = Complex::from(self.aw) * (sqrtjo * b).tanh() / sqrtjo;
         Impedance::new(z.re, z.im)
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct WarburgOpen<T> {
     pub aw: T,
     pub d: T,
@@ -54,8 +59,9 @@ where
     fn impedance(&self, freq: T) -> Impedance<T> {
         let omega = freq_to_angular(freq);
         let j = Complex::<T>::I;
+        let sqrtjo = (j * omega).sqrt();
         let b = self.d / self.diffusion_coeff.sqrt();
-        let z = Complex::from(self.aw) / ((j * omega).sqrt() * b).tanh() / (j * omega).sqrt();
+        let z = Complex::from(self.aw) / (sqrtjo * b).tanh() / sqrtjo;
         Impedance::new(z.re, z.im)
     }
 }

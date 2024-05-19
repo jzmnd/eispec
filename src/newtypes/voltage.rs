@@ -28,6 +28,14 @@ where
 }
 
 impl<T: Float> Voltage<T> {
+    pub fn re(&self) -> T {
+        self.0.re
+    }
+
+    pub fn im(&self) -> T {
+        self.0.im
+    }
+
     pub fn from_polar(r: T, theta: T) -> Self {
         Self(Complex::from_polar(r, theta))
     }

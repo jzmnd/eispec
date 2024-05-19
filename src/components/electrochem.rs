@@ -6,6 +6,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 use crate::utils::freq_to_angular;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Gerischer<T> {
     pub rg: T,
     pub tau: T,

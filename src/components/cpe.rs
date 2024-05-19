@@ -6,6 +6,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 use crate::utils::freq_to_angular;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Cpe<T> {
     pub q0: T,
     pub n: T,
