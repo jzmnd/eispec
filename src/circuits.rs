@@ -120,4 +120,20 @@ mod tests {
         assert_approx_eq!(z.re(), 8.0e3);
         assert_approx_eq!(z.im(), -1.591549431e2);
     }
+
+    #[test]
+    fn test_r_rc_circuits() {
+        let r1 = Resistor::new(2.0e3);
+        let r2 = Resistor::new(6.0e3);
+        let c = Capacitor::new(1.0e-5);
+        let mut subcircuit = ParallelCircuit::<f64>::new();
+        subcircuit.add(r2);
+        subcircuit.add(c);
+        let mut circuit = SeriesCircuit::<f64>::new();
+        circuit.add(r1);
+        circuit.add(subcircuit);
+        let z = circuit.impedance(100.0);
+        assert_approx_eq!(z.re(), 2.004218748e3);
+        assert_approx_eq!(z.im(), -1.590430373e2);
+    }
 }
