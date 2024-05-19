@@ -65,7 +65,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::rcl::{Capacitor, Resistor};
+    use crate::components::rlc::{Capacitor, Resistor};
     use crate::components::Component;
     use assert_approx_eq::assert_approx_eq;
 
