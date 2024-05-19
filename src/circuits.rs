@@ -5,10 +5,7 @@ use crate::constants::FloatConst;
 use crate::newtypes::Impedance;
 
 #[derive(Default)]
-pub struct ParallelCircuit<T>
-where
-    T: FloatConst + ConstOne + ConstZero,
-{
+pub struct ParallelCircuit<T> {
     pub components: Vec<Box<dyn Component<T>>>,
 }
 
@@ -26,10 +23,7 @@ where
 }
 
 #[derive(Default)]
-pub struct SeriesCircuit<T>
-where
-    T: FloatConst + ConstOne + ConstZero,
-{
+pub struct SeriesCircuit<T> {
     pub components: Vec<Box<dyn Component<T>>>,
 }
 
@@ -86,8 +80,8 @@ mod tests {
             components: components,
         };
         let z = circuit.impedance(100.0);
-        assert_approx_eq!(z.re(), 8.0e3);
-        assert_approx_eq!(z.im(), -1.0e3 / std::f64::consts::TAU);
+        assert_approx_eq!(z.re(), 1.669886958e1);
+        assert_approx_eq!(z.im(), -1.573831380e2);
     }
 
     #[test]
@@ -102,6 +96,6 @@ mod tests {
         };
         let z = circuit.impedance(100.0);
         assert_approx_eq!(z.re(), 8.0e3);
-        assert_approx_eq!(z.im(), -1.0e3 / std::f64::consts::TAU);
+        assert_approx_eq!(z.im(), -1.591549431e2);
     }
 }
