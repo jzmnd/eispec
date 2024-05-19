@@ -10,6 +10,12 @@ pub struct Resistor<T> {
     pub r0: T,
 }
 
+impl<T> Resistor<T> {
+    pub fn new(r0: T) -> Self {
+        Self { r0 }
+    }
+}
+
 impl<T> Component<T> for Resistor<T>
 where
     T: FloatConst + ConstOne + ConstZero,
@@ -22,6 +28,12 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Capacitor<T> {
     pub c0: T,
+}
+
+impl<T> Capacitor<T> {
+    pub fn new(c0: T) -> Self {
+        Self { c0 }
+    }
 }
 
 impl<T> Component<T> for Capacitor<T>
@@ -37,6 +49,12 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Inductor<T> {
     pub l0: T,
+}
+
+impl<T> Inductor<T> {
+    pub fn new(l0: T) -> Self {
+        Self { l0 }
+    }
 }
 
 impl<T> Component<T> for Inductor<T>

@@ -11,6 +11,12 @@ pub struct Warburg<T> {
     pub aw: T,
 }
 
+impl<T> Warburg<T> {
+    pub fn new(aw: T) -> Self {
+        Self { aw }
+    }
+}
+
 impl<T> Component<T> for Warburg<T>
 where
     T: FloatConst + ConstOne + ConstZero,
@@ -29,6 +35,16 @@ pub struct WarburgShort<T> {
     pub aw: T,
     pub d: T,
     pub diffusion_coeff: T,
+}
+
+impl<T> WarburgShort<T> {
+    pub fn new(aw: T, d: T, diffusion_coeff: T) -> Self {
+        Self {
+            aw,
+            d,
+            diffusion_coeff,
+        }
+    }
 }
 
 impl<T> Component<T> for WarburgShort<T>
@@ -50,6 +66,16 @@ pub struct WarburgOpen<T> {
     pub aw: T,
     pub d: T,
     pub diffusion_coeff: T,
+}
+
+impl<T> WarburgOpen<T> {
+    pub fn new(aw: T, d: T, diffusion_coeff: T) -> Self {
+        Self {
+            aw,
+            d,
+            diffusion_coeff,
+        }
+    }
 }
 
 impl<T> Component<T> for WarburgOpen<T>

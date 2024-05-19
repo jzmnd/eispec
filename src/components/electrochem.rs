@@ -12,6 +12,12 @@ pub struct Gerischer<T> {
     pub tau: T,
 }
 
+impl<T> Gerischer<T> {
+    pub fn new(rg: T, tau: T) -> Self {
+        Self { rg, tau }
+    }
+}
+
 impl<T> Component<T> for Gerischer<T>
 where
     T: FloatConst + ConstOne + ConstZero,

@@ -9,6 +9,19 @@ pub struct ParallelCircuit<T> {
     pub components: Vec<Box<dyn Component<T>>>,
 }
 
+impl<T> ParallelCircuit<T>
+where
+    T: FloatConst + ConstOne + ConstZero + Default,
+{
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, component: impl Component<T> + 'static) {
+        self.components.push(Box::new(component));
+    }
+}
+
 impl<T> Component<T> for ParallelCircuit<T>
 where
     T: FloatConst + ConstOne + ConstZero,
@@ -25,6 +38,19 @@ where
 #[derive(Default)]
 pub struct SeriesCircuit<T> {
     pub components: Vec<Box<dyn Component<T>>>,
+}
+
+impl<T> SeriesCircuit<T>
+where
+    T: FloatConst + ConstOne + ConstZero + Default,
+{
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, component: impl Component<T> + 'static) {
+        self.components.push(Box::new(component));
+    }
 }
 
 impl<T> Component<T> for SeriesCircuit<T>
@@ -45,12 +71,11 @@ mod tests {
 
     #[test]
     fn test_parallel_r_circuits() {
-        let r1 = Resistor { r0: 2.0e3 };
-        let r2 = Resistor { r0: 6.0e3 };
-        let components: Vec<Box<dyn Component<f64>>> = vec![Box::new(r1), Box::new(r2)];
-        let circuit = ParallelCircuit {
-            components: components,
-        };
+        let r1 = Resistor::new(2.0e3);
+        let r2 = Resistor::new(6.0e3);
+        let mut circuit = ParallelCircuit::<f64>::new();
+        circuit.add(r1);
+        circuit.add(r2);
         let z = circuit.impedance(100.0);
         assert_approx_eq!(z.re(), 1.5e3);
         assert_approx_eq!(z.im(), 0.0);
@@ -58,12 +83,11 @@ mod tests {
 
     #[test]
     fn test_series_r_circuits() {
-        let r1 = Resistor { r0: 2.0e3 };
-        let r2 = Resistor { r0: 6.0e3 };
-        let components: Vec<Box<dyn Component<f64>>> = vec![Box::new(r1), Box::new(r2)];
-        let circuit = SeriesCircuit {
-            components: components,
-        };
+        let r1 = Resistor::new(2.0e3);
+        let r2 = Resistor::new(6.0e3);
+        let mut circuit = SeriesCircuit::<f64>::new();
+        circuit.add(r1);
+        circuit.add(r2);
         let z = circuit.impedance(100.0);
         assert_approx_eq!(z.re(), 8.0e3);
         assert_approx_eq!(z.im(), 0.0);
@@ -71,14 +95,13 @@ mod tests {
 
     #[test]
     fn test_parallel_rc_circuits() {
-        let r1 = Resistor { r0: 2.0e3 };
-        let r2 = Resistor { r0: 6.0e3 };
-        let c = Capacitor { c0: 1.0e-5 };
-        let components: Vec<Box<dyn Component<f64>>> =
-            vec![Box::new(r1), Box::new(r2), Box::new(c)];
-        let circuit = ParallelCircuit {
-            components: components,
-        };
+        let r1 = Resistor::new(2.0e3);
+        let r2 = Resistor::new(6.0e3);
+        let c = Capacitor::new(1.0e-5);
+        let mut circuit = ParallelCircuit::<f64>::new();
+        circuit.add(r1);
+        circuit.add(r2);
+        circuit.add(c);
         let z = circuit.impedance(100.0);
         assert_approx_eq!(z.re(), 1.669886958e1);
         assert_approx_eq!(z.im(), -1.573831380e2);
@@ -86,14 +109,13 @@ mod tests {
 
     #[test]
     fn test_series_rc_circuits() {
-        let r1 = Resistor { r0: 2.0e3 };
-        let r2 = Resistor { r0: 6.0e3 };
-        let c = Capacitor { c0: 1.0e-5 };
-        let components: Vec<Box<dyn Component<f64>>> =
-            vec![Box::new(r1), Box::new(r2), Box::new(c)];
-        let circuit = SeriesCircuit {
-            components: components,
-        };
+        let r1 = Resistor::new(2.0e3);
+        let r2 = Resistor::new(6.0e3);
+        let c = Capacitor::new(1.0e-5);
+        let mut circuit = SeriesCircuit::<f64>::new();
+        circuit.add(r1);
+        circuit.add(r2);
+        circuit.add(c);
         let z = circuit.impedance(100.0);
         assert_approx_eq!(z.re(), 8.0e3);
         assert_approx_eq!(z.im(), -1.591549431e2);

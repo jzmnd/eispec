@@ -12,6 +12,12 @@ pub struct Cpe<T> {
     pub n: T,
 }
 
+impl<T> Cpe<T> {
+    pub fn new(q0: T, n: T) -> Self {
+        Self { q0, n }
+    }
+}
+
 impl<T> Component<T> for Cpe<T>
 where
     T: FloatConst + ConstOne + ConstZero,
