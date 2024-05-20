@@ -3,8 +3,7 @@ use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
-use crate::newtypes::Impedance;
-use crate::utils::freq_to_angular;
+use crate::newtypes::{Frequency, Impedance};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Cpe<T> {
@@ -22,10 +21,9 @@ impl<T> Component<T> for Cpe<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
-        let omega = freq_to_angular(freq);
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
-        let z = Complex::from(self.q0) * (j * omega).powf(self.n).finv();
+        let z = Complex::from(self.q0) * (j * freq.to_angular()).powf(self.n).finv();
         Impedance::new(z.re, z.im)
     }
 }

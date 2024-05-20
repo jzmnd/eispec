@@ -3,8 +3,7 @@ use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
-use crate::newtypes::Impedance;
-use crate::utils::freq_to_angular;
+use crate::newtypes::{Frequency, Impedance};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct HavriliakNegami<T> {
@@ -31,10 +30,9 @@ impl<T> Component<T> for HavriliakNegami<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
-        let omega = freq_to_angular(freq);
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
-        let jot = j * omega * self.tau;
+        let jot = j * freq.to_angular() * self.tau;
         let one = Complex::<T>::ONE;
         let zc = Complex::from(self.r0) / (one + jot.powf(self.alpha)).powf(self.beta);
         let z = zc + self.rinf;
@@ -59,10 +57,9 @@ impl<T> Component<T> for Debye<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
-        let omega = freq_to_angular(freq);
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
-        let jot = j * omega * self.tau;
+        let jot = j * freq.to_angular() * self.tau;
         let one = Complex::<T>::ONE;
         let zc = Complex::from(self.r0) / (one + jot);
         let z = zc + self.rinf;
@@ -93,10 +90,9 @@ impl<T> Component<T> for ColeCole<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
-        let omega = freq_to_angular(freq);
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
-        let jot = j * omega * self.tau;
+        let jot = j * freq.to_angular() * self.tau;
         let one = Complex::<T>::ONE;
         let zc = Complex::from(self.r0) / (one + jot.powf(self.alpha));
         let z = zc + self.rinf;
@@ -127,10 +123,9 @@ impl<T> Component<T> for ColeDavidson<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
-        let omega = freq_to_angular(freq);
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
-        let jot = j * omega * self.tau;
+        let jot = j * freq.to_angular() * self.tau;
         let one = Complex::<T>::ONE;
         let zc = Complex::from(self.r0) / (one + jot).powf(self.beta);
         let z = zc + self.rinf;

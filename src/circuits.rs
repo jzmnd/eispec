@@ -2,7 +2,7 @@ use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
-use crate::newtypes::Impedance;
+use crate::newtypes::{Frequency, Impedance};
 
 #[derive(Default)]
 pub struct ParallelCircuit<T> {
@@ -26,7 +26,7 @@ impl<T> Component<T> for ParallelCircuit<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         self.components
             .iter()
             .map(|c| c.impedance(freq).finv())
@@ -57,7 +57,7 @@ impl<T> Component<T> for SeriesCircuit<T>
 where
     T: FloatConst + ConstOne + ConstZero,
 {
-    fn impedance(&self, freq: T) -> Impedance<T> {
+    fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         self.components.iter().map(|c| c.impedance(freq)).sum()
     }
 }
@@ -73,10 +73,11 @@ mod tests {
     fn test_parallel_r_circuits() {
         let r1 = Resistor::new(2.0e3);
         let r2 = Resistor::new(6.0e3);
+        let f = Frequency::new(100.0);
         let mut circuit = ParallelCircuit::<f64>::new();
         circuit.add(r1);
         circuit.add(r2);
-        let z = circuit.impedance(100.0);
+        let z = circuit.impedance(f);
         assert_approx_eq!(z.re(), 1.5e3);
         assert_approx_eq!(z.im(), 0.0);
     }
@@ -85,10 +86,11 @@ mod tests {
     fn test_series_r_circuits() {
         let r1 = Resistor::new(2.0e3);
         let r2 = Resistor::new(6.0e3);
+        let f = Frequency::new(100.0);
         let mut circuit = SeriesCircuit::<f64>::new();
         circuit.add(r1);
         circuit.add(r2);
-        let z = circuit.impedance(100.0);
+        let z = circuit.impedance(f);
         assert_approx_eq!(z.re(), 8.0e3);
         assert_approx_eq!(z.im(), 0.0);
     }
@@ -98,11 +100,12 @@ mod tests {
         let r1 = Resistor::new(2.0e3);
         let r2 = Resistor::new(6.0e3);
         let c = Capacitor::new(1.0e-5);
+        let f = Frequency::new(100.0);
         let mut circuit = ParallelCircuit::<f64>::new();
         circuit.add(r1);
         circuit.add(r2);
         circuit.add(c);
-        let z = circuit.impedance(100.0);
+        let z = circuit.impedance(f);
         assert_approx_eq!(z.re(), 1.669886958e1);
         assert_approx_eq!(z.im(), -1.573831380e2);
     }
@@ -112,11 +115,12 @@ mod tests {
         let r1 = Resistor::new(2.0e3);
         let r2 = Resistor::new(6.0e3);
         let c = Capacitor::new(1.0e-5);
+        let f = Frequency::new(100.0);
         let mut circuit = SeriesCircuit::<f64>::new();
         circuit.add(r1);
         circuit.add(r2);
         circuit.add(c);
-        let z = circuit.impedance(100.0);
+        let z = circuit.impedance(f);
         assert_approx_eq!(z.re(), 8.0e3);
         assert_approx_eq!(z.im(), -1.591549431e2);
     }
@@ -126,13 +130,14 @@ mod tests {
         let r1 = Resistor::new(2.0e3);
         let r2 = Resistor::new(6.0e3);
         let c = Capacitor::new(1.0e-5);
+        let f = Frequency::new(100.0);
         let mut subcircuit = ParallelCircuit::<f64>::new();
         subcircuit.add(r2);
         subcircuit.add(c);
         let mut circuit = SeriesCircuit::<f64>::new();
         circuit.add(r1);
         circuit.add(subcircuit);
-        let z = circuit.impedance(100.0);
+        let z = circuit.impedance(f);
         assert_approx_eq!(z.re(), 2.004218748e3);
         assert_approx_eq!(z.im(), -1.590430373e2);
     }
