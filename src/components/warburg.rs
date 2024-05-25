@@ -1,3 +1,6 @@
+//!
+//! Warburg Elements.
+//!
 use num::complex::Complex;
 
 use crate::components::Component;

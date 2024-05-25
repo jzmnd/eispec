@@ -1,3 +1,6 @@
+//!
+//! Circuit elements commonly used in electrochemical models.
+//!
 use num::complex::Complex;
 
 use crate::components::Component;
