@@ -1,11 +1,9 @@
-use num::traits::{ConstOne, ConstZero};
-
 use crate::constants::FloatConst;
 use crate::newtypes::{Current, Frequency, Impedance, Voltage};
 
 pub trait Component<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T>;
     fn calc_current(&self, v: Voltage<T>, freq: Frequency<T>) -> Current<T> {

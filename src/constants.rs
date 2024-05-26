@@ -1,6 +1,7 @@
+use num::traits::{ConstOne, ConstZero};
 use num::Float;
 
-pub trait FloatConst: Float {
+pub trait FloatConst: Float + ConstOne + ConstZero {
     const PI: Self;
     const PI_2: Self;
     const SQRT_2: Self;

@@ -1,4 +1,3 @@
-use num::{Float, Num};
 use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
@@ -26,7 +25,7 @@ where
     }
 }
 
-impl<T: Float + FloatConst> Frequency<T> {
+impl<T: FloatConst> Frequency<T> {
     pub fn from_angular(omega: T) -> Self {
         Self(omega / T::PI_2)
     }
@@ -41,28 +40,28 @@ impl<T: Float + FloatConst> Frequency<T> {
 }
 
 // Basic numerical derives
-impl<T: Clone + Num> Add for Frequency<T> {
+impl<T: Clone + FloatConst> Add for Frequency<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Self(self.0 + other.0)
     }
 }
 
-impl<T: Clone + Num> Sub for Frequency<T> {
+impl<T: Clone + FloatConst> Sub for Frequency<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Self(self.0 - other.0)
     }
 }
 
-impl<T: Clone + Num> Mul for Frequency<T> {
+impl<T: Clone + FloatConst> Mul for Frequency<T> {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
         Self(self.0 * other.0)
     }
 }
 
-impl<T: Clone + Num> Div for Frequency<T> {
+impl<T: Clone + FloatConst> Div for Frequency<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
@@ -70,7 +69,7 @@ impl<T: Clone + Num> Div for Frequency<T> {
 }
 
 // Sum derives
-impl<T: Clone + Num> Sum for Frequency<T> {
+impl<T: Clone + FloatConst> Sum for Frequency<T> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,

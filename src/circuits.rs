@@ -1,5 +1,3 @@
-use num::traits::{ConstOne, ConstZero};
-
 use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::newtypes::{Frequency, Impedance};
@@ -11,7 +9,7 @@ pub struct ParallelCircuit<T> {
 
 impl<T> ParallelCircuit<T>
 where
-    T: FloatConst + ConstOne + ConstZero + Default,
+    T: FloatConst + Default,
 {
     pub fn new() -> Self {
         Self::default()
@@ -24,7 +22,7 @@ where
 
 impl<T> Component<T> for ParallelCircuit<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         self.components
@@ -42,7 +40,7 @@ pub struct SeriesCircuit<T> {
 
 impl<T> SeriesCircuit<T>
 where
-    T: FloatConst + ConstOne + ConstZero + Default,
+    T: FloatConst + Default,
 {
     pub fn new() -> Self {
         Self::default()
@@ -55,7 +53,7 @@ where
 
 impl<T> Component<T> for SeriesCircuit<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         self.components.iter().map(|c| c.impedance(freq)).sum()

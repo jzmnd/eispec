@@ -1,5 +1,4 @@
 use num::complex::Complex;
-use num::{Float, Num};
 use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
@@ -28,7 +27,7 @@ where
     }
 }
 
-impl<T: Float + FloatConst> Impedance<T> {
+impl<T: FloatConst> Impedance<T> {
     pub fn re(&self) -> T {
         self.0.re
     }
@@ -66,28 +65,28 @@ impl<T: Float + FloatConst> Impedance<T> {
 }
 
 // Basic numerical derives
-impl<T: Clone + Num> Add for Impedance<T> {
+impl<T: Clone + FloatConst> Add for Impedance<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Self(self.0 + other.0)
     }
 }
 
-impl<T: Clone + Num> Sub for Impedance<T> {
+impl<T: Clone + FloatConst> Sub for Impedance<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Self(self.0 - other.0)
     }
 }
 
-impl<T: Clone + Num> Mul for Impedance<T> {
+impl<T: Clone + FloatConst> Mul for Impedance<T> {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
         Self(self.0 * other.0)
     }
 }
 
-impl<T: Clone + Num> Div for Impedance<T> {
+impl<T: Clone + FloatConst> Div for Impedance<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
@@ -95,7 +94,7 @@ impl<T: Clone + Num> Div for Impedance<T> {
 }
 
 // Sum derives
-impl<T: Clone + Num> Sum for Impedance<T> {
+impl<T: Clone + FloatConst> Sum for Impedance<T> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -106,7 +105,7 @@ impl<T: Clone + Num> Sum for Impedance<T> {
 }
 
 // Voltage = Impedance * Current
-impl<T: Clone + Num> Mul<Current<T>> for Impedance<T> {
+impl<T: Clone + FloatConst> Mul<Current<T>> for Impedance<T> {
     type Output = Voltage<T>;
     fn mul(self, other: Current<T>) -> Voltage<T> {
         Voltage::<T>(self.0 * other.0)

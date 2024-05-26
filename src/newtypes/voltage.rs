@@ -1,9 +1,9 @@
 use num::complex::Complex;
-use num::{Float, Num};
 use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
+use crate::constants::FloatConst;
 use crate::newtypes::{Current, Impedance, Power};
 
 ///
@@ -27,7 +27,7 @@ where
     }
 }
 
-impl<T: Float> Voltage<T> {
+impl<T: FloatConst> Voltage<T> {
     pub fn re(&self) -> T {
         self.0.re
     }
@@ -46,28 +46,28 @@ impl<T: Float> Voltage<T> {
 }
 
 // Basic numerical derives
-impl<T: Clone + Num> Add for Voltage<T> {
+impl<T: Clone + FloatConst> Add for Voltage<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Self(self.0 + other.0)
     }
 }
 
-impl<T: Clone + Num> Sub for Voltage<T> {
+impl<T: Clone + FloatConst> Sub for Voltage<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Self(self.0 - other.0)
     }
 }
 
-impl<T: Clone + Num> Mul for Voltage<T> {
+impl<T: Clone + FloatConst> Mul for Voltage<T> {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
         Self(self.0 * other.0)
     }
 }
 
-impl<T: Clone + Num> Div for Voltage<T> {
+impl<T: Clone + FloatConst> Div for Voltage<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
@@ -75,7 +75,7 @@ impl<T: Clone + Num> Div for Voltage<T> {
 }
 
 // Sum derives
-impl<T: Clone + Num> Sum for Voltage<T> {
+impl<T: Clone + FloatConst> Sum for Voltage<T> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -86,7 +86,7 @@ impl<T: Clone + Num> Sum for Voltage<T> {
 }
 
 // Power = Voltage * Current
-impl<T: Clone + Num> Mul<Current<T>> for Voltage<T> {
+impl<T: Clone + FloatConst> Mul<Current<T>> for Voltage<T> {
     type Output = Power<T>;
     fn mul(self, other: Current<T>) -> Power<T> {
         Power::<T>(self.0 * other.0)
@@ -94,7 +94,7 @@ impl<T: Clone + Num> Mul<Current<T>> for Voltage<T> {
 }
 
 // Current = Voltage / Impedance
-impl<T: Clone + Num> Div<Impedance<T>> for Voltage<T> {
+impl<T: Clone + FloatConst> Div<Impedance<T>> for Voltage<T> {
     type Output = Current<T>;
     fn div(self, other: Impedance<T>) -> Current<T> {
         Current::<T>(self.0 / other.0)
@@ -102,7 +102,7 @@ impl<T: Clone + Num> Div<Impedance<T>> for Voltage<T> {
 }
 
 // Impedance = Voltage / Current
-impl<T: Clone + Num> Div<Current<T>> for Voltage<T> {
+impl<T: Clone + FloatConst> Div<Current<T>> for Voltage<T> {
     type Output = Impedance<T>;
     fn div(self, other: Current<T>) -> Impedance<T> {
         Impedance::<T>(self.0 / other.0)

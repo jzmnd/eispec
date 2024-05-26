@@ -1,9 +1,9 @@
 use num::complex::Complex;
-use num::{Float, Num};
 use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
+use crate::constants::FloatConst;
 use crate::newtypes::{Current, Voltage};
 
 ///
@@ -27,7 +27,7 @@ where
     }
 }
 
-impl<T: Float> Power<T> {
+impl<T: FloatConst> Power<T> {
     pub fn re(&self) -> T {
         self.0.re
     }
@@ -46,28 +46,28 @@ impl<T: Float> Power<T> {
 }
 
 // Basic numerical derives
-impl<T: Clone + Num> Add for Power<T> {
+impl<T: Clone + FloatConst> Add for Power<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Self(self.0 + other.0)
     }
 }
 
-impl<T: Clone + Num> Sub for Power<T> {
+impl<T: Clone + FloatConst> Sub for Power<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Self(self.0 - other.0)
     }
 }
 
-impl<T: Clone + Num> Mul for Power<T> {
+impl<T: Clone + FloatConst> Mul for Power<T> {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
         Self(self.0 * other.0)
     }
 }
 
-impl<T: Clone + Num> Div for Power<T> {
+impl<T: Clone + FloatConst> Div for Power<T> {
     type Output = Self;
     fn div(self, other: Self) -> Self {
         Self(self.0 / other.0)
@@ -75,7 +75,7 @@ impl<T: Clone + Num> Div for Power<T> {
 }
 
 // Sum derives
-impl<T: Clone + Num> Sum for Power<T> {
+impl<T: Clone + FloatConst> Sum for Power<T> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -86,7 +86,7 @@ impl<T: Clone + Num> Sum for Power<T> {
 }
 
 // Current = Power / Voltage
-impl<T: Clone + Num> Div<Voltage<T>> for Power<T> {
+impl<T: Clone + FloatConst> Div<Voltage<T>> for Power<T> {
     type Output = Current<T>;
     fn div(self, other: Voltage<T>) -> Current<T> {
         Current::<T>(self.0 / other.0)
@@ -94,7 +94,7 @@ impl<T: Clone + Num> Div<Voltage<T>> for Power<T> {
 }
 
 // Voltage = Power / Current
-impl<T: Clone + Num> Div<Current<T>> for Power<T> {
+impl<T: Clone + FloatConst> Div<Current<T>> for Power<T> {
     type Output = Voltage<T>;
     fn div(self, other: Current<T>) -> Voltage<T> {
         Voltage::<T>(self.0 / other.0)

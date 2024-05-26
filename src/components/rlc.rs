@@ -1,5 +1,3 @@
-use num::traits::{ConstOne, ConstZero};
-
 use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::newtypes::{Frequency, Impedance};
@@ -17,7 +15,7 @@ impl<T> Resistor<T> {
 
 impl<T> Component<T> for Resistor<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, _freq: Frequency<T>) -> Impedance<T> {
         Impedance::new(self.r0, T::zero())
@@ -37,7 +35,7 @@ impl<T> Capacitor<T> {
 
 impl<T> Component<T> for Capacitor<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         Impedance::new(T::zero(), -(freq.to_angular() * self.c0).recip())
@@ -57,7 +55,7 @@ impl<T> Inductor<T> {
 
 impl<T> Component<T> for Inductor<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         Impedance::new(T::zero(), freq.to_angular() * self.l0)

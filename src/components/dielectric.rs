@@ -1,5 +1,4 @@
 use num::complex::Complex;
-use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
@@ -28,7 +27,7 @@ impl<T> HavriliakNegami<T> {
 
 impl<T> Component<T> for HavriliakNegami<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
@@ -55,7 +54,7 @@ impl<T> Debye<T> {
 
 impl<T> Component<T> for Debye<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
@@ -88,7 +87,7 @@ impl<T> ColeCole<T> {
 
 impl<T> Component<T> for ColeCole<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
@@ -121,7 +120,7 @@ impl<T> ColeDavidson<T> {
 
 impl<T> Component<T> for ColeDavidson<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;

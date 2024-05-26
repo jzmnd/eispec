@@ -1,5 +1,4 @@
 use num::complex::Complex;
-use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
@@ -19,7 +18,7 @@ impl<T> Cpe<T> {
 
 impl<T> Component<T> for Cpe<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;

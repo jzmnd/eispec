@@ -1,5 +1,4 @@
 use num::complex::Complex;
-use num::traits::{ConstOne, ConstZero};
 
 use crate::components::Component;
 use crate::constants::FloatConst;
@@ -18,7 +17,7 @@ impl<T> Warburg<T> {
 
 impl<T> Component<T> for Warburg<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
@@ -47,7 +46,7 @@ impl<T> WarburgShort<T> {
 
 impl<T> Component<T> for WarburgShort<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
@@ -77,7 +76,7 @@ impl<T> WarburgOpen<T> {
 
 impl<T> Component<T> for WarburgOpen<T>
 where
-    T: FloatConst + ConstOne + ConstZero,
+    T: FloatConst,
 {
     fn impedance(&self, freq: Frequency<T>) -> Impedance<T> {
         let j = Complex::<T>::I;
