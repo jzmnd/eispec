@@ -1,3 +1,6 @@
+//!
+//! Constant Phase Element.
+//!
 use num::complex::Complex;
 
 use crate::components::Component;

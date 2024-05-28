@@ -1,3 +1,9 @@
+//!
+//! Dielectric models represented as equivalent circuits.
+//!
+//! Some of these can be represented by combinations of more fundamental
+//! elements but are provided here for convenience.
+//!
 use num::complex::Complex;
 
 use crate::components::Component;

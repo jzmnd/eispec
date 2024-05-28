@@ -1,3 +1,6 @@
+//!
+//! Basic electrical elements (resistor, capacitor and inductor).
+//!
 use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::newtypes::{Frequency, Impedance};
