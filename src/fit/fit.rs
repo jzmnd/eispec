@@ -1,3 +1,6 @@
+//!
+//! Complex non-linear fitting for impedance data
+//!
 use num::traits::NumAssign;
 
 use crate::components::Component;

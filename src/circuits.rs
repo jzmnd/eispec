@@ -1,3 +1,6 @@
+//!
+//! Core circuit components to combine other components in series or parallel
+//!
 use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::newtypes::{Frequency, Impedance};
