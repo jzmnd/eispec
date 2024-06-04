@@ -256,8 +256,14 @@ where
         }
     }
 
+    ///
+    /// Calculate the Jacobian matrix.
+    ///
+    /// This function computes a forward-difference approximation
+    /// to the m by n Jacobian matrix associated with a specified
+    /// problem of m functions in n variables.
+    ///
     pub fn fdjac2(&mut self) -> Result<(), MPFitError> {
-        // Calculate the Jacobian matrix
         let eps = self.cfg.epsfcn.max(T::EPSILON).sqrt();
         self.fjac.fill(T::zero());
         let mut ij = 0;
@@ -294,9 +300,25 @@ where
         Ok(())
     }
 
+    ///
+    /// Compute the QR factorization of the Jacobian.
+    ///
+    /// This function uses Householder transformations with column
+    /// pivoting (optional) to compute a QR factorization of the
+    /// m by n matrix a. That is, qrfac determines an orthogonal
+    /// matrix q, a permutation matrix p, and an upper trapezoidal
+    /// matrix r with diagonal elements of nonincreasing magnitude,
+    /// such that a*p = q*r. the householder transformation for
+    /// column k, k = 1,2,...,min(m,n), is of the form
+    /// ```text
+    ///     i - (1/u(k))*u*u
+    /// ```
+    /// where u has zeros in the first k-1 positions. The form of
+    /// this transformation and the method of pivoting first
+    /// appeared in the corresponding LINPACK subroutine.
+    ///
     pub fn qrfac(&mut self) {
-        // Compute the QR factorization of the Jacobian
-        // compute the initial column norms and initialize several arrays.
+        // Compute the initial column norms and initialize several arrays.
         for (j, ij) in (0..self.nfree).zip((0..self.m * self.nfree).step_by(self.m)) {
             self.wa2[j] = self.fjac[ij..ij + self.m].enorm();
             self.wa1[j] = self.wa2[j];
@@ -377,6 +399,9 @@ where
         }
     }
 
+    ///
+    /// Parse and validate the model parameters.
+    ///
     pub fn parse_params(&mut self) -> Result<(), MPFitError> {
         match &self.f.model_params() {
             None => {
@@ -392,7 +417,7 @@ where
                         if p.limit_lower.is_some_and(|x| self.xall[i] < x)
                             || p.limit_upper.is_some_and(|x| self.xall[i] > x)
                         {
-                            return Err(MPFitError::Bounds);
+                            return Err(MPFitError::InitBounds);
                         }
                     } else {
                         if p.limit_lower.is_some()
@@ -425,6 +450,9 @@ where
         Ok(())
     }
 
+    ///
+    /// Initialize Levenberg-Marquardt parameters and iteration counter.
+    ///
     pub fn init_lm(&mut self) -> Result<(), MPFitError> {
         self.f.eval(self.xall, &mut self.fvec)?;
         self.nfev += 1;
@@ -440,6 +468,9 @@ where
         Ok(())
     }
 
+    ///
+    /// Check if parameters are pegged at their upper/lower limits.
+    ///
     pub fn check_limits(&mut self) {
         if !self.qanylim {
             return;
@@ -472,6 +503,11 @@ where
         }
     }
 
+    ///
+    /// On the first iteration and if user_scale is requested, scale according
+    /// to the norms of the columns of the initial Jacobian,
+    /// calculate the norm of the scaled x, and initialize the step bound delta.
+    ///
     pub fn scale(&mut self) {
         if self.iter != 1 {
             return;
@@ -501,6 +537,9 @@ where
         }
     }
 
+    ///
+    /// Form (q transpose)*fvec and store the first n components in qtf.
+    ///
     pub fn transpose(&mut self) {
         self.wa4.copy_from_slice(&self.fvec);
         let mut jj = 0;
@@ -526,6 +565,10 @@ where
         }
     }
 
+    ///
+    /// Check for overflow. This should be a cheap test here since FJAC
+    /// has been reduced to a (small) square matrix, and the test is O(N^2).
+    ///
     pub fn check_is_finite(&self) -> bool {
         if !self.cfg.no_finite_check {
             for val in &self.fjac {
@@ -537,6 +580,9 @@ where
         true
     }
 
+    ///
+    /// Compute the norm of the scaled gradient.
+    ///
     pub fn gnorm(&self) -> T {
         let mut gnorm = T::zero();
         if self.fnorm != T::zero() {
@@ -558,6 +604,9 @@ where
         gnorm
     }
 
+    ///
+    /// Terminate the fit and return the fit status.
+    ///
     pub fn terminate(mut self) -> Result<MPFitStatus<T>, MPFitError> {
         for i in 0..self.nfree {
             self.xall[self.ifree[i]] = self.x[i];
@@ -611,6 +660,36 @@ where
         })
     }
 
+    ///
+    /// Calculate the covariance matrix.
+    ///
+    /// Given an m by n matrix a, the problem is to determine
+    /// the covariance matrix corresponding to a, defined as
+    /// ```text
+    ///       inverse(a *a)
+    /// ```
+    /// This subroutine completes the solution of the problem
+    /// if it is provided with the necessary information from the
+    /// QR factorization, with column pivoting, of a. That is, if
+    /// a*p = q*r, where p is a permutation matrix, q has orthogonal
+    /// columns, and r is an upper triangular matrix with diagonal
+    /// elements of nonincreasing magnitude, then covar expects
+    /// the full upper triangle of r and the permutation matrix p.
+    /// The covariance matrix is then computed as
+    /// ```text
+    ///       p*inverse(r *r)*p
+    /// ```
+    /// If a is nearly rank deficient, it may be desirable to compute
+    /// the covariance matrix corresponding to the linearly independent
+    /// columns of a. To define the numerical rank of a, covar uses
+    /// the tolerance tol. If l is the largest integer such that
+    /// ```text
+    ///       abs(r(l,l)) > tol*abs(r(1,1))
+    /// ```
+    /// then covar computes the covariance matrix corresponding to
+    /// the first l columns of r. For k greater than l, column
+    /// and row ipvt(k) of the covariance matrix are set to zero.
+    ///
     pub fn covar(mut self) -> Self {
         // Form the inverse of r in the full upper triangle of r.
         let tolr = self.cfg.covtol * self.fjac[0].abs();
@@ -697,6 +776,42 @@ where
         }
     }
 
+    ///
+    /// Given an m by nfree matrix a, an nfree by nfree nonsingular diagonal
+    /// matrix d, an m-vector b, and a positive number delta,
+    /// the problem is to determine a value for the parameter
+    /// par such that if wa1 solves the system
+    /// ```text
+    ///     a*wa1 = b ,   sqrt(par)*d*wa1 = 0
+    /// ```
+    /// in the least squares sense, and dxnorm is the Euclidean
+    /// norm of d*wa1, then either par is zero and
+    /// ```text
+    ///     (dxnorm-delta) < 0.1*delta
+    /// ```
+    /// or par is positive and
+    /// ```text
+    ///     abs(dxnorm-delta) < 0.1*delta
+    /// ```
+    /// This subroutine completes the solution of the problem
+    /// if it is provided with the necessary information from the
+    /// QR factorization, with column pivoting, of a. That is, if
+    /// a*p = q*fjack, where p is a permutation matrix, q has orthogonal
+    /// columns, and fjack is an upper triangular matrix with diagonal
+    /// elements of nonincreasing magnitude, then lmpar expects
+    /// the full upper triangle of fjack, the permutation matrix p,
+    /// and the first nfree components of (q transpose)*b. On output
+    /// lmpar also provides an upper triangular matrix s such that
+    /// ```text
+    ///     p *(a *a + par*d*d)*p = s *s
+    /// ```
+    /// s is employed within lmpar and may be of separate interest.
+    ///
+    /// Only a few iterations are generally needed for convergence
+    /// of the algorithm. If, however, the limit of 10 iterations
+    /// is reached, then the output par will contain the best
+    /// value obtained so far.
+    ///
     pub fn lmpar(&mut self) {
         // Compute and store in wa1 the Gauss-Newton direction. If the
         // Jacobian is rank-deficient, obtain a least squares solution.
@@ -843,7 +958,9 @@ where
         }
     }
 
-    /// Gompute the newton correction.
+    ///
+    /// Compute the Newton correction.
+    ///
     pub fn newton_correction(&mut self, dxnorm: T) {
         for j in 0..self.nfree {
             let l = self.ipvt[j];
@@ -851,6 +968,35 @@ where
         }
     }
 
+    ///
+    /// Given an m by n matrix a, an n by n diagonal matrix d,
+    /// and an m-vector b, the problem is to determine an x which
+    /// solves the system
+    /// ```text
+    /// a*x = b ,     d*x = 0
+    /// ```
+    /// in the least squares sense.
+    ///
+    /// This subroutine completes the solution of the problem
+    /// if it is provided with the necessary information from the
+    /// QR factorization, with column pivoting, of a. That is, if
+    /// a*p = q*r, where p is a permutation matrix, q has orthogonal
+    /// columns, and r is an upper triangular matrix with diagonal
+    /// elements of nonincreasing magnitude, then qrsolv expects
+    /// the full upper triangle of r, the permutation matrix p,
+    /// and the first n components of (q transpose)*b. The system
+    /// a*x = b, d*x = 0, is then equivalent to
+    /// ```text
+    /// r*z = q *b ,  p *d*p*z = 0 ,
+    /// ```
+    /// where x = p*z. If this system does not have full rank,
+    /// then a least squares solution is obtained. On output qrsolv
+    /// also provides an upper triangular matrix s such that
+    /// ```text
+    /// p *(a *a + d*d)*p = s *s .
+    /// ```
+    /// s is computed within qrsolv and may be of separate interest.
+    ///
     pub fn qrsolv(&mut self) {
         // Copy r and (q transpose)*b to preserve input and initialize s.
         // in particular, save the diagonal elements of r in x.
@@ -967,7 +1113,7 @@ where
                 self.wa2[j] = self.x[j] + self.wa1[j];
             }
         } else {
-            // Respect the limits.  If a step were to go out of bounds, then
+            // Respect the limits. If a step were to go out of bounds, then
             // we should take a step in the same direction but shorter distance.
             // The step should take us right to the limit in that case.
             for j in 0..self.nfree {

@@ -8,10 +8,16 @@ use crate::constants::FloatConst;
 use crate::fit::mpfit::{MPFit, MPFitConfig, MPFitDone, MPFitError, MPFitStatus, MPFitSuccess};
 use crate::newtypes::{Frequency, Impedance};
 
+///
+/// Model parameter configurations.
+///
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ModelParameter<T> {
+    /// Whether to fit the parameter or hold fixed
     pub fit: bool,
+    /// Lower limit on parameter, unbounded if None
     pub limit_lower: Option<T>,
+    /// Upper limit on parameter, unbounded if None
     pub limit_upper: Option<T>,
 }
 
@@ -28,21 +34,58 @@ where
     }
 }
 
+///
+/// Trait to be implemented by the user on some impedance data to be fitted.
+///
 pub trait ImpedanceDataFitter<T>
 where
     T: NumAssign + FloatConst,
     Self: Sized,
 {
+    ///
+    /// Electrochemical model to be fit.
+    ///
+    /// Should return an electrical component which could be
+    /// a single element or multiple elements combined in series
+    /// or parallel circuits.
+    ///
     fn model(&self, params: &[T]) -> Box<dyn Component<T>>;
+    ///
+    /// Getter method that should return the frequency data.
+    ///
     fn freqs(&self) -> &[Frequency<T>];
+    ///
+    /// Getter method that should return the measured impedance data.
+    ///
     fn zmeas(&self) -> &[Impedance<T>];
+    ///
+    /// Getter method that should return the experimental error on the
+    /// real and imaginary parts of the impedance data.
+    ///
     fn zerr(&self) -> &[Vec<T>];
+    ///
+    /// Getter method that should return the model parameter configs.
+    ///
+    /// Parameters are expected in the same order as those passed into
+    /// the `model(params)` function.
+    ///
     fn model_params(&self) -> Option<&[ModelParameter<T>]>;
 
+    ///
+    /// Returns the fit configuration. Can be overidden by the user.
+    ///
     fn config(&self) -> MPFitConfig<T> {
         MPFitConfig::default()
     }
 
+    ///
+    /// Main evaluation procedure which is called from MPFit.
+    ///
+    /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
+    /// Residuals for the real and imaginary parts of the impedance
+    /// are calculated separately and combined into a single value for
+    /// the `deviates` slice.
+    ///
     fn eval(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
 
@@ -62,6 +105,9 @@ where
         Ok(())
     }
 
+    ///
+    /// Perform the complex non-linear fitting procedure.
+    ///
     fn fit(&mut self, init: &mut [T]) -> Result<MPFitStatus<T>, MPFitError> {
         let config = self.config();
         let mut fit = MPFit::new(self, init, &config)?;

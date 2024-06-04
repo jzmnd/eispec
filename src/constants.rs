@@ -1,3 +1,9 @@
+//!
+//! Floating point constants.
+//!
+//! Some of these are specific to the CMPFIT algorithm so are defined
+//! here rather than just using `num::traits::FloatConst`.
+//!
 use num::traits::{ConstOne, ConstZero};
 use num::Float;
 
