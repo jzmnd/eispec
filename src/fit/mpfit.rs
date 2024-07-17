@@ -2,164 +2,14 @@
 //! Copied and modified from rmpfit crate Copyright (c) Vadim Dyadkin
 //! Rust implementation of [CMPFIT](https://pages.physics.wisc.edu/~craigm/idl/cmpfit.html)
 //!
+use crate::fit::config::MPFitConfig;
+use crate::fit::status::MPFitStatus;
 use num::traits::NumAssign;
-use std::fmt;
-use thiserror::Error;
 
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
+use crate::fit::enums::{MPFitDone, MPFitError, MPFitSuccess};
 use crate::fit::ImpedanceDataFitter;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum MPFitSuccess {
-    /// Not finished iterations
-    NotDone,
-    /// Convergence in chi-square value
-    ConvergenceChi,
-    /// Convergence in parameter value
-    ConvergencePar,
-    /// Convergence in both chi-square and parameter
-    ConvergenceBoth,
-    /// Convergence in orthogonality
-    ConvergenceDir,
-    /// Maximum number of iterations reached
-    MaxIterReached,
-    /// ftol is too small; no further improvement
-    FtolNoImprovement,
-    /// xtol is too small; no further improvement
-    XtolNoImprovement,
-    /// gtol is too small; no further improvement
-    GtolNoImprovement,
-}
-
-impl fmt::Display for MPFitSuccess {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::NotDone => "Unknown error",
-                Self::ConvergenceChi => "Convergence in chi-square value",
-                Self::ConvergencePar => "Convergence in parameter value",
-                Self::ConvergenceBoth => "Convergence in chi-square and parameter values",
-                Self::ConvergenceDir => "Convergence in orthogonality",
-                Self::MaxIterReached => "Maximum number of iterations reached",
-                Self::FtolNoImprovement => "ftol is too small; no further improvement",
-                Self::XtolNoImprovement => "xtol is too small; no further improvement",
-                Self::GtolNoImprovement => "gtol is too small; no further improvement",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum MPFitError {
-    #[error("General input parameter error")]
-    Input,
-    #[error("User function produced non-finite values")]
-    Nan,
-    #[error("No user data points were supplied")]
-    Empty,
-    #[error("No free parameters")]
-    NoFree,
-    #[error("Initial values inconsistent with constraints")]
-    InitBounds,
-    #[error("Initial constraints inconsistent")]
-    Bounds,
-    #[error("Not enough degrees of freedom")]
-    DoF,
-    #[error("Error during user evaluation")]
-    Eval,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct MPFitStatus<T>
-where
-    T: FloatConst,
-{
-    /// Success enum
-    pub success: MPFitSuccess,
-    /// Final chi^2
-    pub best_norm: T,
-    /// Starting value of chi^2
-    pub orig_norm: T,
-    /// Number of iterations
-    pub n_iter: usize,
-    /// Number of function evaluations
-    pub n_fev: usize,
-    /// Total number of parameters
-    pub n_par: usize,
-    /// Number of free parameters
-    pub n_free: usize,
-    /// Number of pegged parameters
-    pub n_pegged: usize,
-    /// Number of residuals (= num. of data points)
-    pub n_func: usize,
-    /// Final residuals nfunc-vector
-    pub resid: Vec<T>,
-    /// Final parameter uncertainties (1-sigma) npar-vector
-    pub xerror: Vec<T>,
-    /// Final parameter covariance matrix npar x npar array
-    pub covar: Vec<T>,
-}
-
-pub enum MPFitDone {
-    Exit,
-    Inner,
-    Outer,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct MPFitConfig<T> {
-    /// Relative chi-square convergence criterion  (Default: 1e-10)
-    pub ftol: T,
-    /// Relative parameter convergence criterion   (Default: 1e-10)
-    pub xtol: T,
-    /// Orthogonality convergence criterion        (Default: 1e-10)
-    pub gtol: T,
-    /// Finite derivative step size                (Default: T::EPSILON)
-    pub epsfcn: T,
-    /// Initial step bound                         (Default: 100.0)
-    pub step_factor: T,
-    /// Range tolerance for covariance calculation (Default: 1e-14)
-    pub covtol: T,
-    /// Maximum number of iterations               (Default: 200)
-    /// If max_iter == 0, then basic error checking is done, and
-    /// parameter errors/covariances are estimated based on input
-    /// parameter values, but no fitting iterations are done.
-    pub max_iter: usize,
-    /// Maximum number of function evaluations     (Default: 0 (no limit))
-    /// If max_fev == 0 no limit is applied
-    pub max_fev: usize,
-    /// Scale variables by user values?
-    /// true = yes, user scale values in diag;
-    /// false = no, variables scaled internally    (Default: false)
-    pub do_user_scale: bool,
-    /// Disable check for infinite quantities from user?
-    /// true = perform check;
-    /// false = do not perform check               (Default: false)
-    pub no_finite_check: bool,
-}
-
-impl<T> Default for MPFitConfig<T>
-where
-    T: FloatConst,
-{
-    fn default() -> Self {
-        Self {
-            ftol: T::from(1e-10).unwrap(),
-            xtol: T::from(1e-10).unwrap(),
-            gtol: T::from(1e-10).unwrap(),
-            epsfcn: T::EPSILON,
-            step_factor: T::from(100.0).unwrap(),
-            covtol: T::from(1e-14).unwrap(),
-            max_iter: 200,
-            max_fev: 0,
-            do_user_scale: false,
-            no_finite_check: false,
-        }
-    }
-}
 
 pub struct MPFit<'a, T, F>
 where
@@ -289,7 +139,7 @@ where
                 h = -h;
             }
             self.xnew[free_p] = temp + h;
-            self.f.eval(&self.xnew, &mut self.wa4)?;
+            self.f.evaluate(&self.xnew, &mut self.wa4)?;
             self.nfev += 1;
             self.xnew[free_p] = temp;
             for (wa4, fvec) in self.wa4.iter().zip(&self.fvec) {
@@ -454,7 +304,7 @@ where
     /// Initialize Levenberg-Marquardt parameters and iteration counter.
     ///
     pub fn init_lm(&mut self) -> Result<(), MPFitError> {
-        self.f.eval(self.xall, &mut self.fvec)?;
+        self.f.evaluate(self.xall, &mut self.fvec)?;
         self.nfev += 1;
         self.fnorm = self.fvec.enorm();
         self.orig_norm = self.fnorm * self.fnorm;
@@ -654,7 +504,7 @@ where
             n_free: self.nfree,
             n_pegged,
             n_func: self.m,
-            resid: self.fvec,
+            residuals: self.fvec,
             xerror,
             covar,
         })
@@ -1181,7 +1031,7 @@ where
         for i in 0..self.nfree {
             self.xnew[self.ifree[i]] = self.wa2[i];
         }
-        self.f.eval(&self.xnew, &mut self.wa4)?;
+        self.f.evaluate(&self.xnew, &mut self.wa4)?;
         self.nfev += 1;
         self.fnorm1 = self.wa4[0..self.m].enorm();
         // Compute the scaled actual reduction.

@@ -5,7 +5,10 @@ use num::traits::NumAssign;
 
 use crate::components::Component;
 use crate::constants::FloatConst;
-use crate::fit::mpfit::{MPFit, MPFitConfig, MPFitDone, MPFitError, MPFitStatus, MPFitSuccess};
+use crate::fit::config::MPFitConfig;
+use crate::fit::enums::{MPFitDone, MPFitError, MPFitSuccess};
+use crate::fit::mpfit::MPFit;
+use crate::fit::status::MPFitStatus;
 use crate::newtypes::{Frequency, Impedance};
 
 ///
@@ -78,15 +81,7 @@ where
         MPFitConfig::default()
     }
 
-    ///
-    /// Main evaluation procedure which is called from MPFit.
-    ///
-    /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
-    /// Residuals for the real and imaginary parts of the impedance
-    /// are calculated separately and combined into a single value for
-    /// the `deviates` slice.
-    ///
-    fn eval(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
+    fn evaluate(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
 
         for (((d, f), zm), ze) in deviates
