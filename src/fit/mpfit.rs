@@ -8,7 +8,7 @@ use num::traits::NumAssign;
 
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
-use crate::fit::enums::{MPFitDone, MPFitError, MPFitSuccess};
+use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::ImpedanceDataFitter;
 
 pub struct MPFit<'a, T, F> {
@@ -41,7 +41,7 @@ pub struct MPFit<'a, T, F> {
     pub fnorm1: T,
     pub xnorm: T,
     pub delta: T,
-    pub info: MPFitSuccess,
+    pub info: MPFitInfo,
     pub orig_norm: T,
     pub par: T,
     pub iter: usize,
@@ -93,7 +93,7 @@ where
                 fnorm1: -T::one(),
                 xnorm: -T::one(),
                 delta: T::zero(),
-                info: MPFitSuccess::NotDone,
+                info: MPFitInfo::NotDone,
                 orig_norm: T::zero(),
                 par: T::zero(),
                 iter: 1,
@@ -480,7 +480,7 @@ where
         }
         let best_norm = self.fnorm.max(self.fnorm1);
         Ok(MPFitStatus {
-            success: self.info,
+            info: self.info,
             best_norm: best_norm * best_norm,
             orig_norm: self.orig_norm,
             n_iter: self.iter,
@@ -1086,38 +1086,38 @@ where
         }
         // Tests for convergence.
         if actred.abs() <= self.cfg.ftol && prered <= self.cfg.ftol && ratio * T::HALF <= T::one() {
-            self.info = MPFitSuccess::ConvergenceChi;
+            self.info = MPFitInfo::ConvergenceChi;
         }
         if self.delta <= self.cfg.xtol * self.xnorm {
-            self.info = MPFitSuccess::ConvergencePar;
+            self.info = MPFitInfo::ConvergencePar;
         }
         if actred.abs() <= self.cfg.ftol
             && prered <= self.cfg.ftol
             && ratio * T::HALF <= T::one()
-            && self.info == MPFitSuccess::ConvergencePar
+            && self.info == MPFitInfo::ConvergencePar
         {
-            self.info = MPFitSuccess::ConvergenceBoth;
+            self.info = MPFitInfo::ConvergenceBoth;
         }
-        if self.info != MPFitSuccess::NotDone {
+        if self.info != MPFitInfo::NotDone {
             return Ok(MPFitDone::Exit);
         }
         // Tests for termination and stringent tolerances.
         if self.cfg.max_fev > 0 && self.nfev >= self.cfg.max_fev {
-            self.info = MPFitSuccess::MaxIterReached;
+            self.info = MPFitInfo::MaxIterReached;
         }
         if self.iter >= self.cfg.max_iter {
-            self.info = MPFitSuccess::MaxIterReached;
+            self.info = MPFitInfo::MaxIterReached;
         }
         if actred.abs() <= T::EPSILON && prered <= T::EPSILON && ratio * T::HALF <= T::one() {
-            self.info = MPFitSuccess::FtolNoImprovement;
+            self.info = MPFitInfo::FtolNoImprovement;
         }
         if self.delta <= T::EPSILON * self.xnorm {
-            self.info = MPFitSuccess::XtolNoImprovement;
+            self.info = MPFitInfo::XtolNoImprovement;
         }
         if gnorm <= T::EPSILON {
-            self.info = MPFitSuccess::GtolNoImprovement;
+            self.info = MPFitInfo::GtolNoImprovement;
         }
-        if self.info != MPFitSuccess::NotDone {
+        if self.info != MPFitInfo::NotDone {
             return Ok(MPFitDone::Exit);
         }
         if ratio < T::P0001 {

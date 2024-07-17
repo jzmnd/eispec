@@ -6,7 +6,7 @@ use std::fmt;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum MPFitSuccess {
+pub enum MPFitInfo {
     /// Not finished iterations
     NotDone,
     /// Convergence in chi-square value
@@ -27,7 +27,7 @@ pub enum MPFitSuccess {
     GtolNoImprovement,
 }
 
-impl fmt::Display for MPFitSuccess {
+impl fmt::Display for MPFitInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

@@ -6,7 +6,7 @@ use num::traits::NumAssign;
 use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::fit::config::MPFitConfig;
-use crate::fit::enums::{MPFitDone, MPFitError, MPFitSuccess};
+use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::mpfit::MPFit;
 use crate::fit::status::MPFitStatus;
 use crate::newtypes::{Frequency, Impedance};
@@ -123,13 +123,13 @@ where
             }
             let gnorm = fit.gnorm();
             if gnorm <= config.gtol {
-                fit.info = MPFitSuccess::ConvergenceDir;
+                fit.info = MPFitInfo::ConvergenceDir;
             }
-            if fit.info != MPFitSuccess::NotDone {
+            if fit.info != MPFitInfo::NotDone {
                 return fit.terminate();
             }
             if config.max_iter == 0 {
-                fit.info = MPFitSuccess::MaxIterReached;
+                fit.info = MPFitInfo::MaxIterReached;
                 return fit.terminate();
             }
             fit.rescale();

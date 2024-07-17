@@ -2,12 +2,12 @@
 //! Copied and modified from rmpfit crate Copyright (c) Vadim Dyadkin
 //! Rust implementation of [CMPFIT](https://pages.physics.wisc.edu/~craigm/idl/cmpfit.html)
 //!
-use crate::fit::enums::MPFitSuccess;
+use crate::fit::enums::MPFitInfo;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MPFitStatus<T> {
-    /// Success enum
-    pub success: MPFitSuccess,
+    /// Fit info enum
+    pub info: MPFitInfo,
     /// Final chi-squared
     pub best_norm: T,
     /// Starting value of chi-squared
