@@ -135,8 +135,7 @@ where
             fit.rescale();
             loop {
                 fit.lmpar();
-                let res = fit.iterate(gnorm)?;
-                match res {
+                match fit.iterate(gnorm)? {
                     MPFitDone::Exit => return fit.terminate(),
                     MPFitDone::Inner => continue,
                     MPFitDone::Outer => break,

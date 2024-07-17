@@ -11,11 +11,7 @@ use crate::fit::enorm::ENorm;
 use crate::fit::enums::{MPFitDone, MPFitError, MPFitSuccess};
 use crate::fit::ImpedanceDataFitter;
 
-pub struct MPFit<'a, T, F>
-where
-    T: NumAssign + FloatConst,
-    F: ImpedanceDataFitter<T>,
-{
+pub struct MPFit<'a, T, F> {
     pub m: usize,
     pub npar: usize,
     pub nfree: usize,
@@ -227,8 +223,8 @@ where
                     ij = j + self.m * k;
                     jj = j + self.m * j;
                     for _ in j..self.m {
-                        let zzz = temp * self.fjac[jj];
-                        self.fjac[ij] -= zzz;
+                        let dfjac = temp * self.fjac[jj];
+                        self.fjac[ij] -= dfjac;
                         ij += 1;
                         jj += 1;
                     }
@@ -237,7 +233,7 @@ where
                         let temp = (T::one() - temp.powi(2)).max(T::zero());
                         self.wa1[k] *= temp.sqrt();
                         let temp = self.wa1[k] / self.wa3[k];
-                        if temp * temp * T::P05 < T::EPSILON {
+                        if temp.powi(2) * T::P05 < T::EPSILON {
                             let start = jp1 + self.m * k;
                             self.wa1[k] = self.fjac[start..start + self.m - j - 1].enorm();
                             self.wa3[k] = self.wa1[k];
@@ -309,12 +305,10 @@ where
         self.fnorm = self.fvec.enorm();
         self.orig_norm = self.fnorm * self.fnorm;
         self.xnew.copy_from_slice(self.xall);
-        self.x = Vec::with_capacity(self.nfree);
-        for i in 0..self.nfree {
-            self.x.push(self.xall[self.ifree[i]]);
-        }
+        self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
         self.qtf = vec![T::zero(); self.nfree];
         self.fjac = vec![T::zero(); self.m * self.nfree];
+
         Ok(())
     }
 
@@ -322,32 +316,31 @@ where
     /// Check if parameters are pegged at their upper/lower limits.
     ///
     pub fn check_limits(&mut self) {
-        if !self.qanylim {
-            return;
-        }
-        for j in 0..self.nfree {
-            let lpegged = j < self.qllim.len() && self.x[j] == self.llim[j];
-            let upegged = j < self.qulim.len() && self.x[j] == self.ulim[j];
-            let mut sum = T::zero();
-            // If the parameter is pegged at a limit, compute the gradient direction
-            let ij = j * self.m;
-            if lpegged || upegged {
-                for i in 0..self.m {
-                    sum += self.fvec[i] * self.fjac[ij + i];
+        if self.qanylim {
+            for j in 0..self.nfree {
+                let lpegged = j < self.qllim.len() && self.x[j] == self.llim[j];
+                let upegged = j < self.qulim.len() && self.x[j] == self.ulim[j];
+                let mut sum = T::zero();
+                // If the parameter is pegged at a limit, compute the gradient direction
+                let ij = j * self.m;
+                if lpegged || upegged {
+                    for i in 0..self.m {
+                        sum += self.fvec[i] * self.fjac[ij + i];
+                    }
                 }
-            }
-            // If pegged at lower limit and gradient is toward negative then
-            // reset gradient to zero
-            if lpegged && sum > T::zero() {
-                for i in 0..self.m {
-                    self.fjac[ij + i] = T::zero();
+                // If pegged at lower limit and gradient is toward negative then
+                // reset gradient to zero
+                if lpegged && sum > T::zero() {
+                    for i in 0..self.m {
+                        self.fjac[ij + i] = T::zero();
+                    }
                 }
-            }
-            // If pegged at upper limit and gradient is toward positive then
-            // reset gradient to zero
-            if upegged && sum < T::zero() {
-                for i in 0..self.m {
-                    self.fjac[ij + i] = T::zero();
+                // If pegged at upper limit and gradient is toward positive then
+                // reset gradient to zero
+                if upegged && sum < T::zero() {
+                    for i in 0..self.m {
+                        self.fjac[ij + i] = T::zero();
+                    }
                 }
             }
         }
@@ -359,25 +352,24 @@ where
     /// calculate the norm of the scaled x, and initialize the step bound delta.
     ///
     pub fn scale(&mut self) {
-        if self.iter != 1 {
-            return;
-        }
-        if !self.cfg.do_user_scale {
-            for j in 0..self.nfree {
-                self.diag[self.ifree[j]] = if self.wa2[j] == T::zero() {
-                    T::one()
-                } else {
-                    self.wa2[j]
-                };
+        if self.iter == 1 {
+            if !self.cfg.do_user_scale {
+                for j in 0..self.nfree {
+                    self.diag[self.ifree[j]] = if self.wa2[j] == T::zero() {
+                        T::one()
+                    } else {
+                        self.wa2[j]
+                    };
+                }
             }
-        }
-        for j in 0..self.nfree {
-            self.wa3[j] = self.diag[self.ifree[j]] * self.x[j];
-        }
-        self.xnorm = self.wa3.enorm();
-        self.delta = self.cfg.step_factor * self.xnorm;
-        if self.delta == T::zero() {
-            self.delta = self.cfg.step_factor;
+            for j in 0..self.nfree {
+                self.wa3[j] = self.diag[self.ifree[j]] * self.x[j];
+            }
+            self.xnorm = self.wa3.enorm();
+            self.delta = self.cfg.step_factor * self.xnorm;
+            if self.delta == T::zero() {
+                self.delta = self.cfg.step_factor;
+            }
         }
     }
 
@@ -420,14 +412,7 @@ where
     /// has been reduced to a (small) square matrix, and the test is O(N^2).
     ///
     pub fn check_is_finite(&self) -> bool {
-        if !self.cfg.no_finite_check {
-            for val in &self.fjac {
-                if !val.is_finite() {
-                    return false;
-                }
-            }
-        }
-        true
+        self.cfg.no_finite_check || self.fjac.iter().all(|val| val.is_finite())
     }
 
     ///
@@ -557,8 +542,8 @@ where
                 self.fjac[kj] = T::zero();
                 let j0 = j * self.m;
                 for i in 0..=j {
-                    let zzz = -temp * self.fjac[j0 + i];
-                    self.fjac[k0 + i] += zzz;
+                    let dfjac = -temp * self.fjac[j0 + i];
+                    self.fjac[k0 + i] += dfjac;
                 }
             }
             l = k as isize;
@@ -573,8 +558,8 @@ where
                     let temp = self.fjac[k0 + j];
                     let j0 = j * self.m;
                     for i in 0..=j {
-                        let zzz = temp * self.fjac[k0 + i];
-                        self.fjac[j0 + i] += zzz;
+                        let dfjac = temp * self.fjac[k0 + i];
+                        self.fjac[j0 + i] += dfjac;
                     }
                 }
                 let temp = self.fjac[k0 + k];
@@ -617,12 +602,11 @@ where
     }
 
     pub fn rescale(&mut self) {
-        if self.cfg.do_user_scale {
-            return;
-        }
-        for j in 0..self.nfree {
-            let i = self.ifree[j];
-            self.diag[i] = self.diag[i].max(self.wa2[j]);
+        if !self.cfg.do_user_scale {
+            for j in 0..self.nfree {
+                let i = self.ifree[j];
+                self.diag[i] = self.diag[i].max(self.wa2[j]);
+            }
         }
     }
 
@@ -1148,11 +1132,11 @@ where
             || self.cfg.xtol <= T::zero()
             || self.cfg.step_factor <= T::zero()
         {
-            Err(MPFitError::Input)
-        } else if self.m < self.nfree {
-            Err(MPFitError::DoF)
-        } else {
-            Ok(())
+            return Err(MPFitError::Input);
         }
+        if self.m < self.nfree {
+            return Err(MPFitError::DoF);
+        }
+        Ok(())
     }
 }
