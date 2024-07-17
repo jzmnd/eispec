@@ -37,32 +37,28 @@ where
         let mut x3max = T::zero();
         let agiant = T::MP_RGIANT / T::from(self.len()).unwrap();
 
-        for val in self {
+        for &val in self {
             let xabs = val.abs();
             if xabs > T::MP_RDWARF && xabs < agiant {
-                // sum for intermediate components.
-                s2 += xabs * xabs;
+                // Sum for intermediate components.
+                s2 += xabs.powi(2);
             } else if xabs > T::MP_RDWARF {
-                // sum for large components.
+                // Sum for large components.
                 if xabs > x1max {
-                    let temp = x1max / xabs;
-                    s1 = T::one() + s1 * temp * temp;
+                    s1 = T::one() + s1 * (x1max / xabs).powi(2);
                     x1max = xabs;
                 } else {
-                    let temp = xabs / x1max;
-                    s1 += temp * temp;
+                    s1 += (xabs / x1max).powi(2);
                 }
             } else if xabs > x3max {
-                // sum for small components.
-                let temp = x3max / xabs;
-                s3 = T::one() + s3 * temp * temp;
+                // Sum for small components.
+                s3 = T::one() + s3 * (x3max / xabs).powi(2);
                 x3max = xabs;
             } else if xabs != T::zero() {
-                let temp = xabs / x3max;
-                s3 += temp * temp;
+                s3 += (xabs / x3max).powi(2);
             }
         }
-        // calculation of norm.
+        // Calculation of norm.
         if s1 != T::zero() {
             x1max * (s1 + (s2 / x1max) / x1max).sqrt()
         } else if s2 != T::zero() {

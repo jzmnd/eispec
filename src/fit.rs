@@ -1,5 +1,10 @@
+pub mod config;
 pub mod enorm;
-mod fit;
+pub mod enums;
+mod model;
+mod model_parameter;
 pub mod mpfit;
+pub mod status;
 
-pub use crate::fit::fit::{ImpedanceDataFitter, ModelParameter};
+pub use crate::fit::model::ImpedanceModel;
+pub use crate::fit::model_parameter::ModelParameter;

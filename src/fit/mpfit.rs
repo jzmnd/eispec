@@ -2,170 +2,16 @@
 //! Copied and modified from rmpfit crate Copyright (c) Vadim Dyadkin
 //! Rust implementation of [CMPFIT](https://pages.physics.wisc.edu/~craigm/idl/cmpfit.html)
 //!
+use crate::fit::config::MPFitConfig;
+use crate::fit::status::MPFitStatus;
 use num::traits::NumAssign;
-use std::fmt;
-use thiserror::Error;
 
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
-use crate::fit::ImpedanceDataFitter;
+use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
+use crate::fit::ImpedanceModel;
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum MPFitSuccess {
-    /// Not finished iterations
-    NotDone,
-    /// Convergence in chi-square value
-    ConvergenceChi,
-    /// Convergence in parameter value
-    ConvergencePar,
-    /// Convergence in both chi-square and parameter
-    ConvergenceBoth,
-    /// Convergence in orthogonality
-    ConvergenceDir,
-    /// Maximum number of iterations reached
-    MaxIterReached,
-    /// ftol is too small; no further improvement
-    FtolNoImprovement,
-    /// xtol is too small; no further improvement
-    XtolNoImprovement,
-    /// gtol is too small; no further improvement
-    GtolNoImprovement,
-}
-
-impl fmt::Display for MPFitSuccess {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::NotDone => "Unknown error",
-                Self::ConvergenceChi => "Convergence in chi-square value",
-                Self::ConvergencePar => "Convergence in parameter value",
-                Self::ConvergenceBoth => "Convergence in chi-square and parameter values",
-                Self::ConvergenceDir => "Convergence in orthogonality",
-                Self::MaxIterReached => "Maximum number of iterations reached",
-                Self::FtolNoImprovement => "ftol is too small; no further improvement",
-                Self::XtolNoImprovement => "xtol is too small; no further improvement",
-                Self::GtolNoImprovement => "gtol is too small; no further improvement",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum MPFitError {
-    #[error("General input parameter error")]
-    Input,
-    #[error("User function produced non-finite values")]
-    Nan,
-    #[error("No user data points were supplied")]
-    Empty,
-    #[error("No free parameters")]
-    NoFree,
-    #[error("Initial values inconsistent with constraints")]
-    InitBounds,
-    #[error("Initial constraints inconsistent")]
-    Bounds,
-    #[error("Not enough degrees of freedom")]
-    DoF,
-    #[error("Error during user evaluation")]
-    Eval,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct MPFitStatus<T>
-where
-    T: FloatConst,
-{
-    /// Success enum
-    pub success: MPFitSuccess,
-    /// Final chi^2
-    pub best_norm: T,
-    /// Starting value of chi^2
-    pub orig_norm: T,
-    /// Number of iterations
-    pub n_iter: usize,
-    /// Number of function evaluations
-    pub n_fev: usize,
-    /// Total number of parameters
-    pub n_par: usize,
-    /// Number of free parameters
-    pub n_free: usize,
-    /// Number of pegged parameters
-    pub n_pegged: usize,
-    /// Number of residuals (= num. of data points)
-    pub n_func: usize,
-    /// Final residuals nfunc-vector
-    pub resid: Vec<T>,
-    /// Final parameter uncertainties (1-sigma) npar-vector
-    pub xerror: Vec<T>,
-    /// Final parameter covariance matrix npar x npar array
-    pub covar: Vec<T>,
-}
-
-pub enum MPFitDone {
-    Exit,
-    Inner,
-    Outer,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct MPFitConfig<T> {
-    /// Relative chi-square convergence criterion  (Default: 1e-10)
-    pub ftol: T,
-    /// Relative parameter convergence criterion   (Default: 1e-10)
-    pub xtol: T,
-    /// Orthogonality convergence criterion        (Default: 1e-10)
-    pub gtol: T,
-    /// Finite derivative step size                (Default: T::EPSILON)
-    pub epsfcn: T,
-    /// Initial step bound                         (Default: 100.0)
-    pub step_factor: T,
-    /// Range tolerance for covariance calculation (Default: 1e-14)
-    pub covtol: T,
-    /// Maximum number of iterations               (Default: 200)
-    /// If max_iter == 0, then basic error checking is done, and
-    /// parameter errors/covariances are estimated based on input
-    /// parameter values, but no fitting iterations are done.
-    pub max_iter: usize,
-    /// Maximum number of function evaluations     (Default: 0 (no limit))
-    /// If max_fev == 0 no limit is applied
-    pub max_fev: usize,
-    /// Scale variables by user values?
-    /// true = yes, user scale values in diag;
-    /// false = no, variables scaled internally    (Default: false)
-    pub do_user_scale: bool,
-    /// Disable check for infinite quantities from user?
-    /// true = perform check;
-    /// false = do not perform check               (Default: false)
-    pub no_finite_check: bool,
-}
-
-impl<T> Default for MPFitConfig<T>
-where
-    T: FloatConst,
-{
-    fn default() -> Self {
-        Self {
-            ftol: T::from(1e-10).unwrap(),
-            xtol: T::from(1e-10).unwrap(),
-            gtol: T::from(1e-10).unwrap(),
-            epsfcn: T::EPSILON,
-            step_factor: T::from(100.0).unwrap(),
-            covtol: T::from(1e-14).unwrap(),
-            max_iter: 200,
-            max_fev: 0,
-            do_user_scale: false,
-            no_finite_check: false,
-        }
-    }
-}
-
-pub struct MPFit<'a, T, F>
-where
-    T: NumAssign + FloatConst,
-    F: ImpedanceDataFitter<T>,
-{
+pub struct MPFit<'a, T, U> {
     pub m: usize,
     pub npar: usize,
     pub nfree: usize,
@@ -184,7 +30,7 @@ where
     pub llim: Vec<T>,
     pub ulim: Vec<T>,
     pub qanylim: bool,
-    pub f: &'a mut F,
+    pub model: &'a mut U,
     pub wa1: Vec<T>,
     pub wa2: Vec<T>,
     pub wa3: Vec<T>,
@@ -195,24 +41,24 @@ where
     pub fnorm1: T,
     pub xnorm: T,
     pub delta: T,
-    pub info: MPFitSuccess,
+    pub info: MPFitInfo,
     pub orig_norm: T,
     pub par: T,
     pub iter: usize,
     pub cfg: &'a MPFitConfig<T>,
 }
 
-impl<'a, T, F> MPFit<'a, T, F>
+impl<'a, T, U> MPFit<'a, T, U>
 where
     T: NumAssign + FloatConst,
-    F: ImpedanceDataFitter<T>,
+    U: ImpedanceModel<T>,
 {
     pub fn new(
-        f: &'a mut F,
+        model: &'a mut U,
         xall: &'a mut [T],
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
-        let m = f.freqs().len();
+        let m = model.freqs().len();
         let npar = xall.len();
         if m == 0 {
             Err(MPFitError::Empty)
@@ -236,7 +82,7 @@ where
                 llim: vec![],
                 ulim: vec![],
                 qanylim: false,
-                f,
+                model,
                 wa1: vec![T::zero(); npar],
                 wa2: vec![T::zero(); m],
                 wa3: vec![T::zero(); npar],
@@ -247,7 +93,7 @@ where
                 fnorm1: -T::one(),
                 xnorm: -T::one(),
                 delta: T::zero(),
-                info: MPFitSuccess::NotDone,
+                info: MPFitInfo::NotDone,
                 orig_norm: T::zero(),
                 par: T::zero(),
                 iter: 1,
@@ -289,7 +135,7 @@ where
                 h = -h;
             }
             self.xnew[free_p] = temp + h;
-            self.f.eval(&self.xnew, &mut self.wa4)?;
+            self.model.evaluate(&self.xnew, &mut self.wa4)?;
             self.nfev += 1;
             self.xnew[free_p] = temp;
             for (wa4, fvec) in self.wa4.iter().zip(&self.fvec) {
@@ -377,8 +223,8 @@ where
                     ij = j + self.m * k;
                     jj = j + self.m * j;
                     for _ in j..self.m {
-                        let zzz = temp * self.fjac[jj];
-                        self.fjac[ij] -= zzz;
+                        let dfjac = temp * self.fjac[jj];
+                        self.fjac[ij] -= dfjac;
                         ij += 1;
                         jj += 1;
                     }
@@ -387,7 +233,7 @@ where
                         let temp = (T::one() - temp.powi(2)).max(T::zero());
                         self.wa1[k] *= temp.sqrt();
                         let temp = self.wa1[k] / self.wa3[k];
-                        if temp * temp * T::P05 < T::EPSILON {
+                        if temp.powi(2) * T::P05 < T::EPSILON {
                             let start = jp1 + self.m * k;
                             self.wa1[k] = self.fjac[start..start + self.m - j - 1].enorm();
                             self.wa3[k] = self.wa1[k];
@@ -402,8 +248,8 @@ where
     ///
     /// Parse and validate the model parameters.
     ///
-    pub fn parse_params(&mut self) -> Result<(), MPFitError> {
-        match &self.f.model_params() {
+    pub fn parse_parameters(&mut self) -> Result<(), MPFitError> {
+        match &self.model.parameters() {
             None => {
                 self.nfree = self.npar;
                 self.ifree = (0..self.npar).collect();
@@ -454,17 +300,15 @@ where
     /// Initialize Levenberg-Marquardt parameters and iteration counter.
     ///
     pub fn init_lm(&mut self) -> Result<(), MPFitError> {
-        self.f.eval(self.xall, &mut self.fvec)?;
+        self.model.evaluate(self.xall, &mut self.fvec)?;
         self.nfev += 1;
         self.fnorm = self.fvec.enorm();
         self.orig_norm = self.fnorm * self.fnorm;
         self.xnew.copy_from_slice(self.xall);
-        self.x = Vec::with_capacity(self.nfree);
-        for i in 0..self.nfree {
-            self.x.push(self.xall[self.ifree[i]]);
-        }
+        self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
         self.qtf = vec![T::zero(); self.nfree];
         self.fjac = vec![T::zero(); self.m * self.nfree];
+
         Ok(())
     }
 
@@ -472,32 +316,31 @@ where
     /// Check if parameters are pegged at their upper/lower limits.
     ///
     pub fn check_limits(&mut self) {
-        if !self.qanylim {
-            return;
-        }
-        for j in 0..self.nfree {
-            let lpegged = j < self.qllim.len() && self.x[j] == self.llim[j];
-            let upegged = j < self.qulim.len() && self.x[j] == self.ulim[j];
-            let mut sum = T::zero();
-            // If the parameter is pegged at a limit, compute the gradient direction
-            let ij = j * self.m;
-            if lpegged || upegged {
-                for i in 0..self.m {
-                    sum += self.fvec[i] * self.fjac[ij + i];
+        if self.qanylim {
+            for j in 0..self.nfree {
+                let lpegged = j < self.qllim.len() && self.x[j] == self.llim[j];
+                let upegged = j < self.qulim.len() && self.x[j] == self.ulim[j];
+                let mut sum = T::zero();
+                // If the parameter is pegged at a limit, compute the gradient direction
+                let ij = j * self.m;
+                if lpegged || upegged {
+                    for i in 0..self.m {
+                        sum += self.fvec[i] * self.fjac[ij + i];
+                    }
                 }
-            }
-            // If pegged at lower limit and gradient is toward negative then
-            // reset gradient to zero
-            if lpegged && sum > T::zero() {
-                for i in 0..self.m {
-                    self.fjac[ij + i] = T::zero();
+                // If pegged at lower limit and gradient is toward negative then
+                // reset gradient to zero
+                if lpegged && sum > T::zero() {
+                    for i in 0..self.m {
+                        self.fjac[ij + i] = T::zero();
+                    }
                 }
-            }
-            // If pegged at upper limit and gradient is toward positive then
-            // reset gradient to zero
-            if upegged && sum < T::zero() {
-                for i in 0..self.m {
-                    self.fjac[ij + i] = T::zero();
+                // If pegged at upper limit and gradient is toward positive then
+                // reset gradient to zero
+                if upegged && sum < T::zero() {
+                    for i in 0..self.m {
+                        self.fjac[ij + i] = T::zero();
+                    }
                 }
             }
         }
@@ -509,25 +352,24 @@ where
     /// calculate the norm of the scaled x, and initialize the step bound delta.
     ///
     pub fn scale(&mut self) {
-        if self.iter != 1 {
-            return;
-        }
-        if !self.cfg.do_user_scale {
-            for j in 0..self.nfree {
-                self.diag[self.ifree[j]] = if self.wa2[j] == T::zero() {
-                    T::one()
-                } else {
-                    self.wa2[j]
-                };
+        if self.iter == 1 {
+            if !self.cfg.do_user_scale {
+                for j in 0..self.nfree {
+                    self.diag[self.ifree[j]] = if self.wa2[j] == T::zero() {
+                        T::one()
+                    } else {
+                        self.wa2[j]
+                    };
+                }
             }
-        }
-        for j in 0..self.nfree {
-            self.wa3[j] = self.diag[self.ifree[j]] * self.x[j];
-        }
-        self.xnorm = self.wa3.enorm();
-        self.delta = self.cfg.step_factor * self.xnorm;
-        if self.delta == T::zero() {
-            self.delta = self.cfg.step_factor;
+            for j in 0..self.nfree {
+                self.wa3[j] = self.diag[self.ifree[j]] * self.x[j];
+            }
+            self.xnorm = self.wa3.enorm();
+            self.delta = self.cfg.step_factor * self.xnorm;
+            if self.delta == T::zero() {
+                self.delta = self.cfg.step_factor;
+            }
         }
     }
 
@@ -570,14 +412,7 @@ where
     /// has been reduced to a (small) square matrix, and the test is O(N^2).
     ///
     pub fn check_is_finite(&self) -> bool {
-        if !self.cfg.no_finite_check {
-            for val in &self.fjac {
-                if !val.is_finite() {
-                    return false;
-                }
-            }
-        }
-        true
+        self.cfg.no_finite_check || self.fjac.iter().all(|val| val.is_finite())
     }
 
     ///
@@ -612,7 +447,7 @@ where
             self.xall[self.ifree[i]] = self.x[i];
         }
         // Compute number of pegged parameters
-        let n_pegged = match self.f.model_params() {
+        let n_pegged = match self.model.parameters() {
             None => 0,
             Some(params) => {
                 let mut n_pegged = 0;
@@ -645,7 +480,7 @@ where
         }
         let best_norm = self.fnorm.max(self.fnorm1);
         Ok(MPFitStatus {
-            success: self.info,
+            info: self.info,
             best_norm: best_norm * best_norm,
             orig_norm: self.orig_norm,
             n_iter: self.iter,
@@ -654,7 +489,7 @@ where
             n_free: self.nfree,
             n_pegged,
             n_func: self.m,
-            resid: self.fvec,
+            residuals: self.fvec,
             xerror,
             covar,
         })
@@ -707,8 +542,8 @@ where
                 self.fjac[kj] = T::zero();
                 let j0 = j * self.m;
                 for i in 0..=j {
-                    let zzz = -temp * self.fjac[j0 + i];
-                    self.fjac[k0 + i] += zzz;
+                    let dfjac = -temp * self.fjac[j0 + i];
+                    self.fjac[k0 + i] += dfjac;
                 }
             }
             l = k as isize;
@@ -723,8 +558,8 @@ where
                     let temp = self.fjac[k0 + j];
                     let j0 = j * self.m;
                     for i in 0..=j {
-                        let zzz = temp * self.fjac[k0 + i];
-                        self.fjac[j0 + i] += zzz;
+                        let dfjac = temp * self.fjac[k0 + i];
+                        self.fjac[j0 + i] += dfjac;
                     }
                 }
                 let temp = self.fjac[k0 + k];
@@ -767,12 +602,11 @@ where
     }
 
     pub fn rescale(&mut self) {
-        if self.cfg.do_user_scale {
-            return;
-        }
-        for j in 0..self.nfree {
-            let i = self.ifree[j];
-            self.diag[i] = self.diag[i].max(self.wa2[j]);
+        if !self.cfg.do_user_scale {
+            for j in 0..self.nfree {
+                let i = self.ifree[j];
+                self.diag[i] = self.diag[i].max(self.wa2[j]);
+            }
         }
     }
 
@@ -1181,7 +1015,7 @@ where
         for i in 0..self.nfree {
             self.xnew[self.ifree[i]] = self.wa2[i];
         }
-        self.f.eval(&self.xnew, &mut self.wa4)?;
+        self.model.evaluate(&self.xnew, &mut self.wa4)?;
         self.nfev += 1;
         self.fnorm1 = self.wa4[0..self.m].enorm();
         // Compute the scaled actual reduction.
@@ -1252,38 +1086,38 @@ where
         }
         // Tests for convergence.
         if actred.abs() <= self.cfg.ftol && prered <= self.cfg.ftol && ratio * T::HALF <= T::one() {
-            self.info = MPFitSuccess::ConvergenceChi;
+            self.info = MPFitInfo::ConvergenceChi;
         }
         if self.delta <= self.cfg.xtol * self.xnorm {
-            self.info = MPFitSuccess::ConvergencePar;
+            self.info = MPFitInfo::ConvergencePar;
         }
         if actred.abs() <= self.cfg.ftol
             && prered <= self.cfg.ftol
             && ratio * T::HALF <= T::one()
-            && self.info == MPFitSuccess::ConvergencePar
+            && self.info == MPFitInfo::ConvergencePar
         {
-            self.info = MPFitSuccess::ConvergenceBoth;
+            self.info = MPFitInfo::ConvergenceBoth;
         }
-        if self.info != MPFitSuccess::NotDone {
+        if self.info != MPFitInfo::NotDone {
             return Ok(MPFitDone::Exit);
         }
         // Tests for termination and stringent tolerances.
         if self.cfg.max_fev > 0 && self.nfev >= self.cfg.max_fev {
-            self.info = MPFitSuccess::MaxIterReached;
+            self.info = MPFitInfo::MaxIterReached;
         }
         if self.iter >= self.cfg.max_iter {
-            self.info = MPFitSuccess::MaxIterReached;
+            self.info = MPFitInfo::MaxIterReached;
         }
         if actred.abs() <= T::EPSILON && prered <= T::EPSILON && ratio * T::HALF <= T::one() {
-            self.info = MPFitSuccess::FtolNoImprovement;
+            self.info = MPFitInfo::FtolNoImprovement;
         }
         if self.delta <= T::EPSILON * self.xnorm {
-            self.info = MPFitSuccess::XtolNoImprovement;
+            self.info = MPFitInfo::XtolNoImprovement;
         }
         if gnorm <= T::EPSILON {
-            self.info = MPFitSuccess::GtolNoImprovement;
+            self.info = MPFitInfo::GtolNoImprovement;
         }
-        if self.info != MPFitSuccess::NotDone {
+        if self.info != MPFitInfo::NotDone {
             return Ok(MPFitDone::Exit);
         }
         if ratio < T::P0001 {
@@ -1298,11 +1132,11 @@ where
             || self.cfg.xtol <= T::zero()
             || self.cfg.step_factor <= T::zero()
         {
-            Err(MPFitError::Input)
-        } else if self.m < self.nfree {
-            Err(MPFitError::DoF)
-        } else {
-            Ok(())
+            return Err(MPFitError::Input);
         }
+        if self.m < self.nfree {
+            return Err(MPFitError::DoF);
+        }
+        Ok(())
     }
 }
