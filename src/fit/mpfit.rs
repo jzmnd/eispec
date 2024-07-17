@@ -12,16 +12,24 @@ use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
 
 pub struct MPFit<'a, T, U> {
+    /// Number of data points to be fit
     pub m: usize,
+    /// Number of parameters
     pub npar: usize,
+    /// Number of free parameters
     pub nfree: usize,
     pub ifree: Vec<usize>,
+    /// Array of length m which contains the functions evaluated at the output x
     pub fvec: Vec<T>,
+    /// Variable set to the number of calls to the model function
     pub nfev: usize,
     pub xnew: Vec<T>,
     pub x: Vec<T>,
+    /// Array of n initial parameter values
     pub xall: &'a mut [T],
+    /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
     pub qtf: Vec<T>,
+    /// Array of length m * n which contains the approximation to the Jacobian matrix evaluated at x
     pub fjac: Vec<T>,
     pub step: Vec<T>,
     pub dstep: Vec<T>,
@@ -29,22 +37,32 @@ pub struct MPFit<'a, T, U> {
     pub qulim: Vec<bool>,
     pub llim: Vec<T>,
     pub ulim: Vec<T>,
+    /// True if any parameters are pegged at a limit
     pub qanylim: bool,
+    /// Model function to be evaluated
     pub model: &'a mut U,
+    /// Working arrays
     pub wa1: Vec<T>,
     pub wa2: Vec<T>,
     pub wa3: Vec<T>,
     pub wa4: Vec<T>,
+    /// Array of length n which defines the permutation matrix p such that a*p = q*r.
+    /// Column j of p is column ipvt(j) of the identity matrix.
     pub ipvt: Vec<usize>,
+    /// Array of length n
     pub diag: Vec<T>,
     pub fnorm: T,
     pub fnorm1: T,
     pub xnorm: T,
+    /// Variable which specifies an upper bound on the Euclidean norm of d*x
     pub delta: T,
+    /// Fit info
     pub info: MPFitInfo,
     pub orig_norm: T,
     pub par: T,
+    /// Number of iterations of the algorithm
     pub iter: usize,
+    /// Fit configurations
     pub cfg: &'a MPFitConfig<T>,
 }
 
