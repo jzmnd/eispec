@@ -9,38 +9,10 @@ use crate::fit::config::MPFitConfig;
 use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::mpfit::MPFit;
 use crate::fit::status::MPFitStatus;
+use crate::fit::ModelParameter;
 use crate::newtypes::{Frequency, Impedance};
 
-///
-/// Model parameter configurations.
-///
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct ModelParameter<T> {
-    /// Whether to fit the parameter or hold fixed
-    pub fit: bool,
-    /// Lower limit on parameter, unbounded if None
-    pub limit_lower: Option<T>,
-    /// Upper limit on parameter, unbounded if None
-    pub limit_upper: Option<T>,
-}
-
-impl<T> ModelParameter<T>
-where
-    T: FloatConst,
-{
-    pub fn new(fit: bool, limit_lower: Option<T>, limit_upper: Option<T>) -> Self {
-        Self {
-            fit,
-            limit_lower,
-            limit_upper,
-        }
-    }
-}
-
-///
-/// Trait to be implemented by the user on some impedance data to be fitted.
-///
-pub trait ImpedanceDataFitter<T>
+pub trait ImpedanceModel<T>
 where
     T: NumAssign + FloatConst,
     Self: Sized,
@@ -61,18 +33,8 @@ where
     /// Getter method that should return the measured impedance data.
     ///
     fn zmeas(&self) -> &[Impedance<T>];
-    ///
-    /// Getter method that should return the experimental error on the
-    /// real and imaginary parts of the impedance data.
-    ///
-    fn zerr(&self) -> &[Vec<T>];
-    ///
-    /// Getter method that should return the model parameter configs.
-    ///
-    /// Parameters are expected in the same order as those passed into
-    /// the `model(params)` function.
-    ///
-    fn model_params(&self) -> Option<&[ModelParameter<T>]>;
+    fn zerr(&self) -> &[Impedance<T>];
+    fn parameters(&self) -> Option<&[ModelParameter<T>]>;
 
     ///
     /// Returns the fit configuration. Can be overidden by the user.
@@ -92,8 +54,8 @@ where
         {
             let z = model.impedance(*f);
 
-            let dre = (zm.re() - z.re()) / ze[0];
-            let dim = (zm.im() - z.im()) / ze[1];
+            let dre = (zm.re() - z.re()) / ze.re();
+            let dim = (zm.im() - z.im()) / ze.im();
 
             *d = (dre.powi(2) + dim.powi(2)).sqrt();
         }
@@ -108,7 +70,7 @@ where
         let mut fit = MPFit::new(self, init, &config)?;
 
         fit.check_config()?;
-        fit.parse_params()?;
+        fit.parse_parameters()?;
         fit.init_lm()?;
 
         loop {
@@ -158,11 +120,11 @@ mod tests {
     struct ImpedanceData<T> {
         pub freqs: Vec<Frequency<T>>,
         pub zmeas: Vec<Impedance<T>>,
-        pub zerr: Vec<Vec<T>>,
-        pub model_params: Option<Vec<ModelParameter<T>>>,
+        pub zerr: Vec<Impedance<T>>,
+        pub parameters: Option<Vec<ModelParameter<T>>>,
     }
 
-    impl<T> ImpedanceDataFitter<T> for ImpedanceData<T>
+    impl<T> ImpedanceModel<T> for ImpedanceData<T>
     where
         T: NumAssign + FloatConst + Default + 'static,
     {
@@ -187,11 +149,11 @@ mod tests {
         fn zmeas(&self) -> &[Impedance<T>] {
             &self.zmeas
         }
-        fn zerr(&self) -> &[Vec<T>] {
+        fn zerr(&self) -> &[Impedance<T>] {
             &self.zerr
         }
-        fn model_params(&self) -> Option<&[ModelParameter<T>]> {
-            self.model_params.as_deref()
+        fn parameters(&self) -> Option<&[ModelParameter<T>]> {
+            self.parameters.as_deref()
         }
     }
 
@@ -232,8 +194,8 @@ mod tests {
                 Impedance::new(156.6866455660058, -68.77302834015914),
                 Impedance::new(129.3131274372006, -57.47773552749856),
             ],
-            zerr: vec![vec![1.0, 1.0]; 15],
-            model_params: Some(vec![
+            zerr: vec![Impedance::new(1.0, 1.0); 15],
+            parameters: Some(vec![
                 ModelParameter::new(true, Some(0.0), None),
                 ModelParameter::new(true, Some(0.0), None),
                 ModelParameter::new(true, Some(0.0), Some(1.0)),

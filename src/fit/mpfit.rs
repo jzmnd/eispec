@@ -9,9 +9,9 @@ use num::traits::NumAssign;
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
 use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
-use crate::fit::ImpedanceDataFitter;
+use crate::fit::ImpedanceModel;
 
-pub struct MPFit<'a, T, F> {
+pub struct MPFit<'a, T, U> {
     pub m: usize,
     pub npar: usize,
     pub nfree: usize,
@@ -30,7 +30,7 @@ pub struct MPFit<'a, T, F> {
     pub llim: Vec<T>,
     pub ulim: Vec<T>,
     pub qanylim: bool,
-    pub f: &'a mut F,
+    pub model: &'a mut U,
     pub wa1: Vec<T>,
     pub wa2: Vec<T>,
     pub wa3: Vec<T>,
@@ -48,17 +48,17 @@ pub struct MPFit<'a, T, F> {
     pub cfg: &'a MPFitConfig<T>,
 }
 
-impl<'a, T, F> MPFit<'a, T, F>
+impl<'a, T, U> MPFit<'a, T, U>
 where
     T: NumAssign + FloatConst,
-    F: ImpedanceDataFitter<T>,
+    U: ImpedanceModel<T>,
 {
     pub fn new(
-        f: &'a mut F,
+        model: &'a mut U,
         xall: &'a mut [T],
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
-        let m = f.freqs().len();
+        let m = model.freqs().len();
         let npar = xall.len();
         if m == 0 {
             Err(MPFitError::Empty)
@@ -82,7 +82,7 @@ where
                 llim: vec![],
                 ulim: vec![],
                 qanylim: false,
-                f,
+                model,
                 wa1: vec![T::zero(); npar],
                 wa2: vec![T::zero(); m],
                 wa3: vec![T::zero(); npar],
@@ -135,7 +135,7 @@ where
                 h = -h;
             }
             self.xnew[free_p] = temp + h;
-            self.f.evaluate(&self.xnew, &mut self.wa4)?;
+            self.model.evaluate(&self.xnew, &mut self.wa4)?;
             self.nfev += 1;
             self.xnew[free_p] = temp;
             for (wa4, fvec) in self.wa4.iter().zip(&self.fvec) {
@@ -245,11 +245,8 @@ where
         }
     }
 
-    ///
-    /// Parse and validate the model parameters.
-    ///
-    pub fn parse_params(&mut self) -> Result<(), MPFitError> {
-        match &self.f.model_params() {
+    pub fn parse_parameters(&mut self) -> Result<(), MPFitError> {
+        match &self.model.parameters() {
             None => {
                 self.nfree = self.npar;
                 self.ifree = (0..self.npar).collect();
@@ -300,7 +297,7 @@ where
     /// Initialize Levenberg-Marquardt parameters and iteration counter.
     ///
     pub fn init_lm(&mut self) -> Result<(), MPFitError> {
-        self.f.evaluate(self.xall, &mut self.fvec)?;
+        self.model.evaluate(self.xall, &mut self.fvec)?;
         self.nfev += 1;
         self.fnorm = self.fvec.enorm();
         self.orig_norm = self.fnorm * self.fnorm;
@@ -447,7 +444,7 @@ where
             self.xall[self.ifree[i]] = self.x[i];
         }
         // Compute number of pegged parameters
-        let n_pegged = match self.f.model_params() {
+        let n_pegged = match self.model.parameters() {
             None => 0,
             Some(params) => {
                 let mut n_pegged = 0;
@@ -1015,7 +1012,7 @@ where
         for i in 0..self.nfree {
             self.xnew[self.ifree[i]] = self.wa2[i];
         }
-        self.f.evaluate(&self.xnew, &mut self.wa4)?;
+        self.model.evaluate(&self.xnew, &mut self.wa4)?;
         self.nfev += 1;
         self.fnorm1 = self.wa4[0..self.m].enorm();
         // Compute the scaled actual reduction.
