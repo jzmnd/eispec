@@ -12,6 +12,9 @@ use crate::fit::status::MPFitStatus;
 use crate::fit::ModelParameter;
 use crate::newtypes::{Frequency, Impedance};
 
+///
+/// Trait to be implemented by the user on some impedance data to be fitted.
+///
 pub trait ImpedanceModel<T>
 where
     T: NumAssign + FloatConst,
@@ -33,7 +36,17 @@ where
     /// Getter method that should return the measured impedance data.
     ///
     fn zmeas(&self) -> &[Impedance<T>];
+    ///
+    /// Getter method that should return the experimental error on the
+    /// real and imaginary parts of the impedance data.
+    ///
     fn zerr(&self) -> &[Impedance<T>];
+    ///
+    /// Getter method that should return the model parameter configs.
+    ///
+    /// Parameters are expected in the same order as those passed into
+    /// the `model(params)` function.
+    ///
     fn parameters(&self) -> Option<&[ModelParameter<T>]>;
 
     ///
@@ -43,6 +56,14 @@ where
         MPFitConfig::default()
     }
 
+    ///
+    /// Main evaluation procedure which is called from MPFit.
+    ///
+    /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
+    /// Residuals for the real and imaginary parts of the impedance
+    /// are calculated separately and combined into a single value for
+    /// the `deviates` slice.
+    ///
     fn evaluate(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
 

@@ -245,6 +245,9 @@ where
         }
     }
 
+    ///
+    /// Parse and validate the model parameters.
+    ///
     pub fn parse_parameters(&mut self) -> Result<(), MPFitError> {
         match &self.model.parameters() {
             None => {
