@@ -6,30 +6,11 @@ use eispec::components::Component;
 use eispec::data::ImpedanceDataError;
 use eispec::data::{ImpedanceData, ImpedanceDataAccessors};
 use eispec::fit::{ImpedanceModel, ModelParameter};
+use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
+#[impl_impedance_data_accessors]
 struct ImpedanceDataWrap(ImpedanceData<f64>);
-
-impl ImpedanceDataAccessors<f64> for ImpedanceDataWrap {
-    fn get_freqs(&self) -> &[Frequency<f64>] {
-        self.0.get_freqs()
-    }
-    fn get_zmeas(&self) -> &[Impedance<f64>] {
-        self.0.get_zmeas()
-    }
-    fn get_zerr(&self) -> &[Impedance<f64>] {
-        self.0.get_zerr()
-    }
-    fn get_parameters(&self) -> Option<&[ModelParameter<f64>]> {
-        self.0.get_parameters()
-    }
-    fn set_parameters(&mut self, parameters: Vec<ModelParameter<f64>>) {
-        self.0.set_parameters(parameters)
-    }
-    fn from_csv(filename: &str) -> Result<ImpedanceDataWrap, ImpedanceDataError> {
-        ImpedanceData::<f64>::from_csv(filename).map(|a| ImpedanceDataWrap(a))
-    }
-}
 
 impl ImpedanceModel<f64> for ImpedanceDataWrap {
     fn model(&self, params: &[f64]) -> Box<(dyn Component<f64>)> {
