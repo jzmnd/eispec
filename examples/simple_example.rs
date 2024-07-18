@@ -52,25 +52,23 @@ fn main() {
     let mut data = ImpedanceDataWrap::from_csv("examples/simple_example_data.csv").unwrap();
 
     data.set_parameters(vec![
-        ModelParameter::new(true, Some(0.0), None),
-        ModelParameter::new(true, Some(0.0), None),
-        ModelParameter::new(true, Some(0.0), Some(1.0)),
-        ModelParameter::new(true, Some(10.0), None),
+        ModelParameter::new(10.0, true, Some(0.0), None),
+        ModelParameter::new(1.0e5, true, Some(0.0), None),
+        ModelParameter::new(0.1, true, Some(0.0), Some(1.0)),
+        ModelParameter::new(20.0, false, Some(10.0), None),
     ]);
 
-    let mut params = [10.0, 1.0e5, 0.1, 10.0];
+    let res = data.fit().unwrap();
 
-    let res = data.fit(&mut params).unwrap();
-
+    println!("{:#?}", data.get_parameters().unwrap());
     println!("{:#?}", res);
-    println!("{:#?}", params);
 
     assert_eq!(res.n_par, 4);
-    assert_eq!(res.n_free, 4);
+    assert_eq!(res.n_free, 3);
     assert_eq!(res.n_func, 15);
 
-    assert_approx_eq!(950.6002232884109, params[0], 0.1);
-    assert_approx_eq!(33318.887554247776, params[1], 0.1);
-    assert_approx_eq!(0.3498288404822108, params[2], 1e-3);
-    assert_approx_eq!(19.740535282535895, params[3], 0.1);
+    assert_approx_eq!(950.0, res.x[0], 0.2);
+    assert_approx_eq!(33333.3, res.x[1], 50.0);
+    assert_approx_eq!(0.35, res.x[2], 1e-3);
+    assert_eq!(20.0, res.x[3]);
 }

@@ -65,9 +65,16 @@ where
     ///
     /// Perform the complex non-linear fitting procedure.
     ///
-    fn fit(&mut self, init: &mut [T]) -> Result<MPFitStatus<T>, MPFitError> {
+    fn fit(&mut self) -> Result<MPFitStatus<T>, MPFitError> {
+        let mut init: Vec<T> = self
+            .get_parameters()
+            .unwrap()
+            .iter()
+            .map(|p| p.init_value)
+            .collect();
+
         let config = self.config();
-        let mut fit = MPFit::new(self, init, &config)?;
+        let mut fit = MPFit::new(self, &mut init, &config)?;
 
         fit.check_config()?;
         fit.parse_parameters()?;

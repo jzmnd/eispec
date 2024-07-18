@@ -30,4 +30,6 @@ pub struct MPFitStatus<T> {
     pub xerror: Vec<T>,
     /// Final parameter covariance matrix npar x npar array
     pub covar: Vec<T>,
+    /// Final parameter values
+    pub x: Vec<T>,
 }

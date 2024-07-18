@@ -24,8 +24,9 @@ pub struct MPFit<'a, T, U> {
     /// Variable set to the number of calls to the model function
     pub nfev: usize,
     pub xnew: Vec<T>,
+    /// Array of free parameter values
     pub x: Vec<T>,
-    /// Array of n initial parameter values
+    /// Array of n parameter values
     pub xall: &'a mut [T],
     /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
     pub qtf: Vec<T>,
@@ -510,6 +511,7 @@ where
             residuals: self.fvec,
             xerror,
             covar,
+            x: self.xall.to_vec(),
         })
     }
 
