@@ -76,7 +76,7 @@ where
         xall: &'a mut [T],
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
-        let m = model.freqs().len();
+        let m = model.get_freqs().len();
         let npar = xall.len();
         if m == 0 {
             Err(MPFitError::Empty)
@@ -267,7 +267,7 @@ where
     /// Parse and validate the model parameters.
     ///
     pub fn parse_parameters(&mut self) -> Result<(), MPFitError> {
-        match &self.model.parameters() {
+        match &self.model.get_parameters() {
             None => {
                 self.nfree = self.npar;
                 self.ifree = (0..self.npar).collect();
@@ -465,7 +465,7 @@ where
             self.xall[self.ifree[i]] = self.x[i];
         }
         // Compute number of pegged parameters
-        let n_pegged = match self.model.parameters() {
+        let n_pegged = match self.model.get_parameters() {
             None => 0,
             Some(params) => {
                 let mut n_pegged = 0;
