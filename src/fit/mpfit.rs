@@ -510,6 +510,7 @@ where
             residuals: self.fvec,
             xerror,
             covar,
+            x: self.xall.to_vec(),
         })
     }
 

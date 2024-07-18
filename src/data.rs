@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_set_parameters() {
         let mut data = ImpedanceData::<f64>::from_csv("examples/simple_example_data.csv").unwrap();
-        let test_params = vec![ModelParameter::new(true, Some(0.0), None)];
+        let test_params = vec![ModelParameter::new(1.234, true, Some(0.0), None)];
         data.set_parameters(test_params.clone());
         assert_eq!(data.get_parameters().unwrap(), test_params);
     }
