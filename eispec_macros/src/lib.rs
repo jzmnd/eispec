@@ -4,6 +4,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericArgument, PathArguments, Type};
 
+///
+/// Macro that automatically defines the data getter/setter methods required for `ImpedanceData<T>`.
+///
 #[proc_macro_attribute]
 pub fn impl_impedance_data_accessors(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -69,6 +72,9 @@ pub fn impl_impedance_data_accessors(_attr: TokenStream, item: TokenStream) -> T
     TokenStream::from(expanded)
 }
 
+///
+/// Extracts the inner type `T` from `ImpedanceData<T>`.
+///
 fn extract_inner_type(ty: &Type) -> Option<Type> {
     let segment = match ty {
         Type::Path(t) => t.path.segments.last()?,

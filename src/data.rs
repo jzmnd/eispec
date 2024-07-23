@@ -1,3 +1,6 @@
+//!
+//! Impedance data structure used to store the experimental data to be fit.
+//!
 use std::io;
 use std::num::ParseFloatError;
 use std::str::FromStr;
