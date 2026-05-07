@@ -31,10 +31,10 @@ impl FloatConst for f32 {
     const SQRT_2: f32 = std::f32::consts::SQRT_2;
     const FRAC_2_PI: f32 = std::f32::consts::FRAC_2_PI;
     const FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2;
-    const EPSILON: f32 = std::f32::EPSILON;
+    const EPSILON: f32 = f32::EPSILON;
     const MP_RDWARF: f32 = 1.3278711e-18;
     const MP_RGIANT: f32 = 1.8446743e18;
-    const MIN_POSITIVE: f32 = std::f32::MIN_POSITIVE;
+    const MIN_POSITIVE: f32 = f32::MIN_POSITIVE;
     const HALF: f32 = 0.5;
     const P1: f32 = 0.1;
     const P25: f32 = 0.25;
@@ -49,10 +49,10 @@ impl FloatConst for f64 {
     const SQRT_2: f64 = std::f64::consts::SQRT_2;
     const FRAC_2_PI: f64 = std::f64::consts::FRAC_2_PI;
     const FRAC_PI_2: f64 = std::f64::consts::FRAC_PI_2;
-    const EPSILON: f64 = std::f64::EPSILON;
+    const EPSILON: f64 = f64::EPSILON;
     const MP_RDWARF: f64 = 1.8269129119256895e-153;
     const MP_RGIANT: f64 = 1.3407807929942596e153;
-    const MIN_POSITIVE: f64 = std::f64::MIN_POSITIVE;
+    const MIN_POSITIVE: f64 = f64::MIN_POSITIVE;
     const HALF: f64 = 0.5;
     const P1: f64 = 0.1;
     const P25: f64 = 0.25;

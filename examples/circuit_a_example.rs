@@ -12,7 +12,7 @@ use eispec::newtypes::{Frequency, Impedance};
 struct ImpedanceDataWrap(ImpedanceData<f64>);
 
 impl ImpedanceModel<f64> for ImpedanceDataWrap {
-    fn model(&self, params: &[f64]) -> Box<(dyn Component<f64>)> {
+    fn model(&self, params: &[f64]) -> Box<dyn Component<f64>> {
         let zarc = ColeCole::<f64>::new(params[0], params[1], params[2], params[3]);
         let cp = Capacitor::<f64>::new(params[4]);
         let mut model = ParallelCircuit::<f64>::new();

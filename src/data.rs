@@ -13,29 +13,11 @@ use crate::newtypes::{Frequency, Impedance};
 #[derive(Debug, Error)]
 pub enum ImpedanceDataError {
     #[error("Unable to parse numeric data from str")]
-    StrParseError,
+    StrParseError(#[from] ParseFloatError),
     #[error("Unable to read file")]
-    ReadError,
+    ReadError(#[from] io::Error),
     #[error("Unable read CSV record")]
-    CsvError,
-}
-
-impl From<io::Error> for ImpedanceDataError {
-    fn from(_: io::Error) -> Self {
-        ImpedanceDataError::ReadError
-    }
-}
-
-impl From<csv::Error> for ImpedanceDataError {
-    fn from(_: csv::Error) -> Self {
-        ImpedanceDataError::CsvError
-    }
-}
-
-impl From<ParseFloatError> for ImpedanceDataError {
-    fn from(_: ParseFloatError) -> Self {
-        ImpedanceDataError::StrParseError
-    }
+    CsvError(#[from] csv::Error),
 }
 
 pub trait ImpedanceDataAccessors<T> {
