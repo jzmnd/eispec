@@ -39,17 +39,17 @@ fn main() {
         ModelParameter::new(20.0, false, Some(10.0), None),
     ]);
 
-    let res = data.fit().unwrap();
+    let result = data.fit().unwrap();
 
     println!("{:#?}", data.get_parameters().unwrap());
-    println!("{:#?}", res);
+    println!("{:#?}", result);
 
-    assert_eq!(res.n_par, 4);
-    assert_eq!(res.n_free, 3);
-    assert_eq!(res.n_func, 15);
+    assert_eq!(result.n_par, 4);
+    assert_eq!(result.n_free, 3);
+    assert_eq!(result.n_func, 15);
 
-    assert_approx_eq!(950.0, res.x[0], 0.2);
-    assert_approx_eq!(33333.3, res.x[1], 50.0);
-    assert_approx_eq!(0.35, res.x[2], 1e-3);
-    assert_eq!(20.0, res.x[3]);
+    assert_approx_eq!(950.0, result.x[0], 0.2);
+    assert_approx_eq!(33333.3, result.x[1], 50.0);
+    assert_approx_eq!(0.35, result.x[2], 1e-3);
+    assert_eq!(20.0, result.x[3]);
 }
