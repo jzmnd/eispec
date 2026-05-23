@@ -11,6 +11,21 @@ use crate::fit::enorm::ENorm;
 use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
 
+#[derive(Debug, Clone, Copy)]
+struct ParamBound<T> {
+    lower: Option<T>,
+    upper: Option<T>,
+}
+
+impl<T> Default for ParamBound<T> {
+    fn default() -> Self {
+        Self {
+            lower: None,
+            upper: None,
+        }
+    }
+}
+
 pub struct MPFit<'a, T, U> {
     /// Number of data points to be fit
     m: usize,
@@ -34,11 +49,9 @@ pub struct MPFit<'a, T, U> {
     fjac: Vec<T>,
     step: Vec<T>,
     dstep: Vec<T>,
-    qllim: Vec<bool>,
-    qulim: Vec<bool>,
-    llim: Vec<T>,
-    ulim: Vec<T>,
-    /// True if any parameters are pegged at a limit
+    /// Per-free-parameter lower/upper bounds (`None` means unbounded on that side).
+    bounds: Vec<ParamBound<T>>,
+    /// Cached: true if any free parameter has at least one limit.
     qanylim: bool,
     /// Model function to be evaluated
     model: &'a mut U,
@@ -91,10 +104,7 @@ where
                 fjac: vec![],
                 step: vec![],
                 dstep: vec![],
-                qllim: vec![],
-                qulim: vec![],
-                llim: vec![],
-                ulim: vec![],
+                bounds: vec![],
                 qanylim: false,
                 model,
                 ipvt: vec![0; npar],
@@ -138,12 +148,10 @@ where
             if h == T::zero() {
                 h = eps;
             }
-            if j < self.qulim.len()
-                && self.qulim[j]
-                && j < self.ulim.len()
-                && temp > self.ulim[j] - h
-            {
-                h = -h;
+            if let Some(u) = self.bounds[j].upper {
+                if temp > u - h {
+                    h = -h;
+                }
             }
             self.xnew[free_p] = temp + h;
             self.model.evaluate(&self.xnew, &mut perturbed)?;
@@ -270,6 +278,7 @@ where
             None => {
                 self.nfree = self.npar;
                 self.ifree = (0..self.npar).collect();
+                self.bounds = vec![ParamBound::default(); self.npar];
             }
             Some(pars) => {
                 if pars.is_empty() {
@@ -291,10 +300,10 @@ where
                         }
                         self.nfree += 1;
                         self.ifree.push(i);
-                        self.qllim.push(p.limit_lower.is_some());
-                        self.qulim.push(p.limit_upper.is_some());
-                        self.llim.push(p.limit_lower.unwrap_or(T::zero()));
-                        self.ulim.push(p.limit_upper.unwrap_or(T::zero()));
+                        self.bounds.push(ParamBound {
+                            lower: p.limit_lower,
+                            upper: p.limit_upper,
+                        });
                         if p.limit_lower.is_some() || p.limit_upper.is_some() {
                             self.qanylim = true;
                         }
@@ -335,8 +344,9 @@ where
     pub fn check_limits(&mut self) {
         if self.qanylim {
             for j in 0..self.nfree {
-                let lpegged = j < self.qllim.len() && self.x[j] == self.llim[j];
-                let upegged = j < self.qulim.len() && self.x[j] == self.ulim[j];
+                let bound = self.bounds[j];
+                let lpegged = bound.lower.is_some_and(|l| self.x[j] == l);
+                let upegged = bound.upper.is_some_and(|u| self.x[j] == u);
                 let mut sum = T::zero();
                 // If the parameter is pegged at a limit, compute the gradient direction
                 let ij = j * self.m;
@@ -991,8 +1001,9 @@ where
             // we should take a step in the same direction but shorter distance.
             // The step should take us right to the limit in that case.
             for j in 0..self.nfree {
-                let lpegged = self.qllim[j] && self.x[j] <= self.llim[j];
-                let upegged = self.qulim[j] && self.x[j] >= self.ulim[j];
+                let bound = self.bounds[j];
+                let lpegged = bound.lower.is_some_and(|l| self.x[j] <= l);
+                let upegged = bound.upper.is_some_and(|u| self.x[j] >= u);
                 let dstep = step[j].abs() > T::EPSILON;
                 if lpegged && step[j] < T::zero() {
                     step[j] = T::zero();
@@ -1000,11 +1011,17 @@ where
                 if upegged && step[j] > T::zero() {
                     step[j] = T::zero();
                 }
-                if dstep && self.qllim[j] && self.x[j] + step[j] < self.llim[j] {
-                    alpha = alpha.min((self.llim[j] - self.x[j]) / step[j]);
-                }
-                if dstep && self.qulim[j] && self.x[j] + step[j] > self.ulim[j] {
-                    alpha = alpha.min((self.ulim[j] - self.x[j]) / step[j]);
+                if dstep {
+                    if let Some(l) = bound.lower {
+                        if self.x[j] + step[j] < l {
+                            alpha = alpha.min((l - self.x[j]) / step[j]);
+                        }
+                    }
+                    if let Some(u) = bound.upper {
+                        if self.x[j] + step[j] > u {
+                            alpha = alpha.min((u - self.x[j]) / step[j]);
+                        }
+                    }
                 }
             }
             // Scale the resulting vector, advance to the next position
@@ -1013,33 +1030,30 @@ where
                 trial_x[j] = self.x[j] + step[j];
                 // Adjust the output values. If the step put us exactly
                 // on a boundary, make sure it is exact.
-                let sgnu = if self.ulim[j] >= T::zero() {
-                    T::one()
-                } else {
-                    -T::one()
-                };
-                let sgnl = if self.llim[j] >= T::zero() {
-                    T::one()
-                } else {
-                    -T::one()
-                };
-                let ulim1 = self.ulim[j] * (T::one() - sgnu * T::EPSILON)
-                    - if self.ulim[j] == T::zero() {
-                        T::EPSILON
-                    } else {
-                        T::zero()
-                    };
-                let llim1 = self.llim[j] * (T::one() + sgnl * T::EPSILON)
-                    + if self.llim[j] == T::zero() {
-                        T::EPSILON
-                    } else {
-                        T::zero()
-                    };
-                if self.qulim[j] && trial_x[j] >= ulim1 {
-                    trial_x[j] = self.ulim[j];
+                let bound = self.bounds[j];
+                if let Some(u) = bound.upper {
+                    let sgnu = if u >= T::zero() { T::one() } else { -T::one() };
+                    let ulim1 = u * (T::one() - sgnu * T::EPSILON)
+                        - if u == T::zero() {
+                            T::EPSILON
+                        } else {
+                            T::zero()
+                        };
+                    if trial_x[j] >= ulim1 {
+                        trial_x[j] = u;
+                    }
                 }
-                if self.qllim[j] && trial_x[j] <= llim1 {
-                    trial_x[j] = self.llim[j];
+                if let Some(l) = bound.lower {
+                    let sgnl = if l >= T::zero() { T::one() } else { -T::one() };
+                    let llim1 = l * (T::one() + sgnl * T::EPSILON)
+                        + if l == T::zero() {
+                            T::EPSILON
+                        } else {
+                            T::zero()
+                        };
+                    if trial_x[j] <= llim1 {
+                        trial_x[j] = l;
+                    }
                 }
             }
         }
