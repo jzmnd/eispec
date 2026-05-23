@@ -13,58 +13,58 @@ use crate::fit::ImpedanceModel;
 
 pub struct MPFit<'a, T, U> {
     /// Number of data points to be fit
-    pub m: usize,
+    m: usize,
     /// Number of parameters
-    pub npar: usize,
+    npar: usize,
     /// Number of free parameters
-    pub nfree: usize,
-    pub ifree: Vec<usize>,
+    nfree: usize,
+    ifree: Vec<usize>,
     /// Array of length m which contains the functions evaluated at the output x
-    pub fvec: Vec<T>,
+    fvec: Vec<T>,
     /// Variable set to the number of calls to the model function
-    pub nfev: usize,
-    pub xnew: Vec<T>,
+    nfev: usize,
+    xnew: Vec<T>,
     /// Array of free parameter values
-    pub x: Vec<T>,
+    x: Vec<T>,
     /// Array of n parameter values
-    pub xall: &'a mut [T],
+    xall: &'a mut [T],
     /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
-    pub qtf: Vec<T>,
+    qtf: Vec<T>,
     /// Array of length m * n which contains the approximation to the Jacobian matrix evaluated at x
-    pub fjac: Vec<T>,
-    pub step: Vec<T>,
-    pub dstep: Vec<T>,
-    pub qllim: Vec<bool>,
-    pub qulim: Vec<bool>,
-    pub llim: Vec<T>,
-    pub ulim: Vec<T>,
+    fjac: Vec<T>,
+    step: Vec<T>,
+    dstep: Vec<T>,
+    qllim: Vec<bool>,
+    qulim: Vec<bool>,
+    llim: Vec<T>,
+    ulim: Vec<T>,
     /// True if any parameters are pegged at a limit
-    pub qanylim: bool,
+    qanylim: bool,
     /// Model function to be evaluated
-    pub model: &'a mut U,
+    model: &'a mut U,
     /// Working arrays
-    pub wa1: Vec<T>,
-    pub wa2: Vec<T>,
-    pub wa3: Vec<T>,
-    pub wa4: Vec<T>,
+    wa1: Vec<T>,
+    wa2: Vec<T>,
+    wa3: Vec<T>,
+    wa4: Vec<T>,
     /// Array of length n which defines the permutation matrix p such that a*p = q*r.
     /// Column j of p is column ipvt(j) of the identity matrix.
-    pub ipvt: Vec<usize>,
+    ipvt: Vec<usize>,
     /// Array of length n
-    pub diag: Vec<T>,
-    pub fnorm: T,
-    pub fnorm1: T,
-    pub xnorm: T,
+    diag: Vec<T>,
+    fnorm: T,
+    fnorm1: T,
+    xnorm: T,
     /// Variable which specifies an upper bound on the Euclidean norm of d*x
-    pub delta: T,
+    delta: T,
     /// Fit info
     pub info: MPFitInfo,
-    pub orig_norm: T,
-    pub par: T,
+    orig_norm: T,
+    par: T,
     /// Number of iterations of the algorithm
-    pub iter: usize,
+    iter: usize,
     /// Fit configurations
-    pub cfg: &'a MPFitConfig<T>,
+    cfg: &'a MPFitConfig<T>,
 }
 
 impl<'a, T, U> MPFit<'a, T, U>
@@ -815,7 +815,7 @@ where
     ///
     /// Compute the Newton correction.
     ///
-    pub fn newton_correction(&mut self, dxnorm: T) {
+    fn newton_correction(&mut self, dxnorm: T) {
         for j in 0..self.nfree {
             let l = self.ipvt[j];
             self.wa3[j] = self.diag[self.ifree[l]] * (self.wa4[l] / dxnorm);
@@ -851,7 +851,7 @@ where
     /// ```
     /// s is computed within qrsolv and may be of separate interest.
     ///
-    pub fn qrsolv(&mut self) {
+    fn qrsolv(&mut self) {
         // Copy r and (q transpose)*b to preserve input and initialize s.
         // in particular, save the diagonal elements of r in x.
         let mut kk = 0;
