@@ -1,3 +1,4 @@
+use assert_approx_eq::assert_approx_eq;
 use eispec::circuits::ParallelCircuit;
 use eispec::components::dielectric::ColeCole;
 use eispec::components::rlc::Capacitor;
@@ -34,8 +35,18 @@ fn main() {
         ModelParameter::new(1.3e-12, true, Some(0.0), None),
     ]);
 
-    let res = data.fit().unwrap();
+    let result = data.fit().unwrap();
 
     println!("{:#?}", data.get_parameters().unwrap());
-    println!("{:#?}", res);
+    println!("{:#?}", result);
+
+    assert_eq!(result.n_par, 5);
+    assert_eq!(result.n_free, 5);
+    assert_eq!(result.n_func, 27);
+
+    assert_approx_eq!(996807.8, result.x[0], 0.1);
+    assert_approx_eq!(1997064.0, result.x[1], 1.0);
+    assert_approx_eq!(0.9863895, result.x[2]);
+    assert_approx_eq!(0.29748956, result.x[3]);
+    assert_approx_eq!(9.951745e-13, result.x[4], 1e-16);
 }

@@ -1,7 +1,6 @@
 use assert_approx_eq::assert_approx_eq;
 use eispec::circuits::{ParallelCircuit, SeriesCircuit};
-use eispec::components::cpe::Cpe;
-use eispec::components::rlc::Resistor;
+use eispec::components::rlc::{Capacitor, Resistor};
 use eispec::components::Component;
 use eispec::data::ImpedanceDataError;
 use eispec::data::{ImpedanceData, ImpedanceDataAccessors};
@@ -14,15 +13,15 @@ struct ImpedanceDataWrap(ImpedanceData<f64>);
 
 impl ImpedanceModel<f64> for ImpedanceDataWrap {
     fn model(&self, params: &[f64]) -> Box<dyn Component<f64>> {
-        let r1 = Resistor::<f64>::new(params[0]);
-        let cpe = Cpe::<f64>::new(params[1], params[2]);
+        let rct = Resistor::<f64>::new(params[0]);
+        let cdl = Capacitor::<f64>::new(params[1]);
         let mut sub = ParallelCircuit::<f64>::new();
-        sub.add(r1);
-        sub.add(cpe);
+        sub.add(rct);
+        sub.add(cdl);
 
         let mut model = SeriesCircuit::<f64>::new();
-        let r2 = Resistor::<f64>::new(params[3]);
-        model.add(r2);
+        let rs = Resistor::<f64>::new(params[2]);
+        model.add(rs);
         model.add(sub);
 
         Box::new(model)
@@ -30,13 +29,11 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 }
 
 fn main() {
-    let mut data = ImpedanceDataWrap::from_csv("examples/simple_example_data.csv").unwrap();
-
+    let mut data = ImpedanceDataWrap::from_csv("examples/randles_example_data.csv").unwrap();
     data.set_parameters(vec![
-        ModelParameter::new(10.0, true, Some(0.0), None),
-        ModelParameter::new(1.0e5, true, Some(0.0), None),
-        ModelParameter::new(0.1, true, Some(0.0), Some(1.0)),
-        ModelParameter::new(20.0, false, Some(10.0), None),
+        ModelParameter::new(100.0, true, Some(0.0), None),
+        ModelParameter::new(2e-6, true, Some(0.0), None),
+        ModelParameter::new(500.0, true, Some(0.0), None),
     ]);
 
     let result = data.fit().unwrap();
@@ -44,12 +41,11 @@ fn main() {
     println!("{:#?}", data.get_parameters().unwrap());
     println!("{:#?}", result);
 
-    assert_eq!(result.n_par, 4);
+    assert_eq!(result.n_par, 3);
     assert_eq!(result.n_free, 3);
-    assert_eq!(result.n_func, 15);
+    assert_eq!(result.n_func, 81);
 
-    assert_approx_eq!(950.0, result.x[0], 0.2);
-    assert_approx_eq!(33333.3, result.x[1], 50.0);
-    assert_approx_eq!(0.35, result.x[2], 1e-3);
-    assert_eq!(20.0, result.x[3]);
+    assert_approx_eq!(200.0, result.x[0], 0.01);
+    assert_approx_eq!(1e-6, result.x[1]);
+    assert_approx_eq!(1000.0, result.x[2], 0.01);
 }
