@@ -10,6 +10,7 @@ use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
 use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
+use std::ops::{Index, IndexMut, Range};
 
 #[derive(Debug, Clone, Copy)]
 struct ParamBound<T> {
@@ -23,6 +24,101 @@ impl<T> Default for ParamBound<T> {
             lower: None,
             upper: None,
         }
+    }
+}
+
+/// Column-major matrix storing the Jacobian (and in-place factorisations of it).
+///
+/// Exposes three indexing forms:
+/// - `m[k]`         — flat (column-major) for tight running-index loops
+/// - `m[(i, j)]`    — 2D element access
+/// - `m[a..b]`      — flat slice range, for `enorm()` and `iter_mut()`
+#[derive(Debug, Clone)]
+struct JacMatrix<T> {
+    data: Vec<T>,
+    rows: usize,
+}
+
+impl<T: FloatConst> JacMatrix<T> {
+    fn empty() -> Self {
+        Self {
+            data: vec![],
+            rows: 0,
+        }
+    }
+
+    fn zeros(rows: usize, cols: usize) -> Self {
+        Self {
+            data: vec![T::zero(); rows * cols],
+            rows,
+        }
+    }
+
+    fn fill(&mut self, val: T) {
+        self.data.fill(val);
+    }
+
+    fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.data.iter()
+    }
+
+    fn col(&self, j: usize) -> &[T] {
+        let start = j * self.rows;
+        &self.data[start..start + self.rows]
+    }
+
+    fn col_mut(&mut self, j: usize) -> &mut [T] {
+        let start = j * self.rows;
+        &mut self.data[start..start + self.rows]
+    }
+
+    fn swap_cols(&mut self, a: usize, b: usize) {
+        if a == b {
+            return;
+        }
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+        let (left, right) = self.data.split_at_mut(hi * self.rows);
+        let lo_start = lo * self.rows;
+        left[lo_start..lo_start + self.rows].swap_with_slice(&mut right[..self.rows]);
+    }
+}
+
+impl<T> Index<usize> for JacMatrix<T> {
+    type Output = T;
+    fn index(&self, k: usize) -> &T {
+        &self.data[k]
+    }
+}
+
+impl<T> IndexMut<usize> for JacMatrix<T> {
+    fn index_mut(&mut self, k: usize) -> &mut T {
+        &mut self.data[k]
+    }
+}
+
+impl<T> Index<(usize, usize)> for JacMatrix<T> {
+    type Output = T;
+    fn index(&self, (i, j): (usize, usize)) -> &T {
+        &self.data[j * self.rows + i]
+    }
+}
+
+impl<T> IndexMut<(usize, usize)> for JacMatrix<T> {
+    fn index_mut(&mut self, (i, j): (usize, usize)) -> &mut T {
+        &mut self.data[j * self.rows + i]
+    }
+}
+
+impl<T> Index<Range<usize>> for JacMatrix<T> {
+    type Output = [T];
+    fn index(&self, r: Range<usize>) -> &[T] {
+        &self.data[r]
+    }
+}
+
+impl<T> IndexMut<Range<usize>> for JacMatrix<T> {
+    fn index_mut(&mut self, r: Range<usize>) -> &mut [T] {
+        &mut self.data[r]
     }
 }
 
@@ -45,8 +141,8 @@ pub struct MPFit<'a, T, U> {
     xall: &'a mut [T],
     /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
     qtf: Vec<T>,
-    /// Array of length m * n which contains the approximation to the Jacobian matrix evaluated at x
-    fjac: Vec<T>,
+    /// m x nfree column-major matrix holding the Jacobian (and its in-place QR factorisation).
+    fjac: JacMatrix<T>,
     step: Vec<T>,
     dstep: Vec<T>,
     /// Per-free-parameter lower/upper bounds (`None` means unbounded on that side).
@@ -101,7 +197,7 @@ where
                 x: vec![],
                 xall,
                 qtf: vec![],
-                fjac: vec![],
+                fjac: JacMatrix::empty(),
                 step: vec![],
                 dstep: vec![],
                 bounds: vec![],
@@ -206,13 +302,7 @@ where
                 }
             }
             if kmax != j {
-                let mut ij = self.m * j;
-                let mut jj = self.m * kmax;
-                for _ in 0..self.m {
-                    self.fjac.swap(jj, ij);
-                    ij += 1;
-                    jj += 1;
-                }
+                self.fjac.swap_cols(j, kmax);
                 rdiag[kmax] = rdiag[j];
                 norms[kmax] = norms[j];
                 self.ipvt.swap(j, kmax);
@@ -244,7 +334,7 @@ where
                         ij += 1;
                         jj += 1;
                     }
-                    let temp = sum / self.fjac[j + self.m * j];
+                    let temp = sum / self.fjac[(j, j)];
                     ij = j + self.m * k;
                     jj = j + self.m * j;
                     for _ in j..self.m {
@@ -254,7 +344,7 @@ where
                         jj += 1;
                     }
                     if rdiag[k] != T::zero() {
-                        let temp = self.fjac[j + self.m * k] / rdiag[k];
+                        let temp = self.fjac[(j, k)] / rdiag[k];
                         let temp = (T::one() - temp.powi(2)).max(T::zero());
                         rdiag[k] *= temp.sqrt();
                         let temp = rdiag[k] / norms[k];
@@ -333,7 +423,7 @@ where
         self.xnew.copy_from_slice(self.xall);
         self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
         self.qtf = vec![T::zero(); self.nfree];
-        self.fjac = vec![T::zero(); self.m * self.nfree];
+        self.fjac = JacMatrix::zeros(self.m, self.nfree);
 
         Ok(())
     }
@@ -349,25 +439,15 @@ where
                 let upegged = bound.upper.is_some_and(|u| self.x[j] == u);
                 let mut sum = T::zero();
                 // If the parameter is pegged at a limit, compute the gradient direction
-                let ij = j * self.m;
                 if lpegged || upegged {
-                    for i in 0..self.m {
-                        sum += self.fvec[i] * self.fjac[ij + i];
+                    for (f, jc) in self.fvec.iter().zip(self.fjac.col(j)) {
+                        sum += *f * *jc;
                     }
                 }
-                // If pegged at lower limit and gradient is toward negative then
-                // reset gradient to zero
-                if lpegged && sum > T::zero() {
-                    for i in 0..self.m {
-                        self.fjac[ij + i] = T::zero();
-                    }
-                }
-                // If pegged at upper limit and gradient is toward positive then
-                // reset gradient to zero
-                if upegged && sum < T::zero() {
-                    for i in 0..self.m {
-                        self.fjac[ij + i] = T::zero();
-                    }
+                // If pegged at a limit and gradient is in the disallowed direction,
+                // zero out the column.
+                if (lpegged && sum > T::zero()) || (upegged && sum < T::zero()) {
+                    self.fjac.col_mut(j).fill(T::zero());
                 }
             }
         }
@@ -494,14 +574,13 @@ where
         let mut covar = vec![T::zero(); self.npar * self.npar];
         for j in 0..self.nfree {
             let k = self.ifree[j] * self.npar;
-            let l = j * self.m;
             for i in 0..self.nfree {
-                covar[k + self.ifree[i]] = self.fjac[l + i]
+                covar[k + self.ifree[i]] = self.fjac[(i, j)];
             }
         }
         let mut xerror = vec![T::zero(); self.npar];
         for j in 0..self.nfree {
-            let cc = self.fjac[j * self.m + j];
+            let cc = self.fjac[(j, j)];
             if cc > T::zero() {
                 xerror[self.ifree[j]] = cc.sqrt();
             }
@@ -556,23 +635,19 @@ where
     ///
     pub fn covar(mut self) -> Self {
         // Form the inverse of r in the full upper triangle of r.
-        let tolr = self.cfg.covtol * self.fjac[0].abs();
+        let tolr = self.cfg.covtol * self.fjac[(0, 0)].abs();
         let mut l: isize = -1;
         for k in 0..self.nfree {
-            let k0 = k * self.m;
-            let kk = k0 + k;
-            if self.fjac[kk].abs() <= tolr {
+            if self.fjac[(k, k)].abs() <= tolr {
                 break;
             }
-            self.fjac[kk] = T::one() / self.fjac[kk];
+            self.fjac[(k, k)] = T::one() / self.fjac[(k, k)];
             for j in 0..k {
-                let kj = k0 + j;
-                let temp = self.fjac[kk] * self.fjac[kj];
-                self.fjac[kj] = T::zero();
-                let j0 = j * self.m;
+                let temp = self.fjac[(k, k)] * self.fjac[(j, k)];
+                self.fjac[(j, k)] = T::zero();
                 for i in 0..=j {
-                    let dfjac = -temp * self.fjac[j0 + i];
-                    self.fjac[k0 + i] += dfjac;
+                    let dfjac = -temp * self.fjac[(i, j)];
+                    self.fjac[(i, k)] += dfjac;
                 }
             }
             l = k as isize;
@@ -582,51 +657,45 @@ where
         if l >= 0 {
             let l = l as usize;
             for k in 0..=l {
-                let k0 = k * self.m;
                 for j in 0..k {
-                    let temp = self.fjac[k0 + j];
-                    let j0 = j * self.m;
+                    let temp = self.fjac[(j, k)];
                     for i in 0..=j {
-                        let dfjac = temp * self.fjac[k0 + i];
-                        self.fjac[j0 + i] += dfjac;
+                        let dfjac = temp * self.fjac[(i, k)];
+                        self.fjac[(i, j)] += dfjac;
                     }
                 }
-                let temp = self.fjac[k0 + k];
+                let temp = self.fjac[(k, k)];
                 for i in 0..=k {
-                    self.fjac[k0 + i] *= temp;
+                    self.fjac[(i, k)] *= temp;
                 }
             }
         }
         // For the full lower triangle of the covariance matrix
-        // in the strict lower triangle or and in wa
+        // in the strict lower triangle of r
         let mut covar_diag = vec![T::zero(); self.nfree];
         for j in 0..self.nfree {
             let jj = self.ipvt[j];
             let sing = j as isize > l;
-            let j0 = j * self.m;
-            let jj0 = jj * self.m;
             for i in 0..=j {
-                let ji = j0 + i;
                 if sing {
-                    self.fjac[ji] = T::zero();
+                    self.fjac[(i, j)] = T::zero();
                 }
                 let ii = self.ipvt[i];
                 if ii > jj {
-                    self.fjac[jj0 + ii] = self.fjac[ji];
+                    self.fjac[(ii, jj)] = self.fjac[(i, j)];
                 }
                 if ii < jj {
-                    self.fjac[ii * self.m + jj] = self.fjac[ji];
+                    self.fjac[(jj, ii)] = self.fjac[(i, j)];
                 }
             }
-            covar_diag[jj] = self.fjac[j0 + j];
+            covar_diag[jj] = self.fjac[(j, j)];
         }
         // Symmetrize the covariance matrix in r
         for j in 0..self.nfree {
-            let j0 = j * self.m;
             for i in 0..j {
-                self.fjac[j0 + i] = self.fjac[i * self.m + j];
+                self.fjac[(i, j)] = self.fjac[(j, i)];
             }
-            self.fjac[j0 + j] = covar_diag[j];
+            self.fjac[(j, j)] = covar_diag[j];
         }
         self
     }
@@ -686,22 +755,20 @@ where
         // Compute and store in `step` the Gauss-Newton direction. If the
         // Jacobian is rank-deficient, obtain a least squares solution.
         let mut nsing = self.nfree;
-        let mut jj = 0;
         for j in 0..self.nfree {
             work[j] = self.qtf[j];
-            if self.fjac[jj] == T::zero() && nsing == self.nfree {
+            if self.fjac[(j, j)] == T::zero() && nsing == self.nfree {
                 nsing = j;
             }
             if nsing < self.nfree {
                 work[j] = T::zero();
             }
-            jj += self.m + 1;
         }
         if nsing >= 1 {
             for k in 0..nsing {
                 let j = nsing - k - 1;
                 let mut ij = self.m * j;
-                work[j] /= self.fjac[j + ij];
+                work[j] /= self.fjac[(j, j)];
                 let temp = work[j];
                 if j > 0 {
                     for i in 0..j {
@@ -742,7 +809,7 @@ where
                         ij += 1;
                     }
                 }
-                work[j] = (work[j] - sum) / self.fjac[j + self.m * j];
+                work[j] = (work[j] - sum) / self.fjac[(j, j)];
                 jj += self.m;
             }
             let temp = work.enorm();
