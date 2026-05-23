@@ -66,12 +66,3 @@ pub enum MPFitError {
     #[error("Error during user evaluation")]
     Eval,
 }
-
-pub enum MPFitDone {
-    /// Fit is complete, exit
-    Exit,
-    /// Fit is running the inner loop
-    Inner,
-    /// Fit is running the outer loop
-    Outer,
-}

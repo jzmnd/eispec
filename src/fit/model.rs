@@ -7,7 +7,7 @@ use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::data::ImpedanceDataAccessors;
 use crate::fit::config::MPFitConfig;
-use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
+use crate::fit::enums::{MPFitError, MPFitInfo};
 use crate::fit::mpfit::MPFit;
 use crate::fit::status::MPFitStatus;
 
@@ -109,10 +109,12 @@ where
             fit.rescale(&acnorm);
             loop {
                 fit.lmpar(&mut step);
-                match fit.iterate(gnorm, &mut step)? {
-                    MPFitDone::Exit => return fit.terminate(),
-                    MPFitDone::Inner => continue,
-                    MPFitDone::Outer => break,
+                let accepted = fit.iterate(gnorm, &mut step)?;
+                if fit.info != MPFitInfo::NotDone {
+                    return fit.terminate();
+                }
+                if accepted {
+                    break;
                 }
             }
         }

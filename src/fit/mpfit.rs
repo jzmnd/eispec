@@ -8,7 +8,7 @@ use num::traits::NumAssign;
 
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
-use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
+use crate::fit::enums::{MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
 use std::ops::{Index, IndexMut, Range};
 
@@ -1047,7 +1047,12 @@ where
         }
     }
 
-    pub fn iterate(&mut self, gnorm: T, step: &mut [T]) -> Result<MPFitDone, MPFitError> {
+    /// Take one Levenberg-Marquardt trial step. Returns `true` if the step was
+    /// accepted (caller should re-evaluate the Jacobian), `false` if it was
+    /// rejected (caller should shrink the trust region and try again). Either
+    /// way, the caller must also inspect `self.info` — if it is not
+    /// `NotDone`, the fit has terminated and `terminate()` should be called.
+    pub fn iterate(&mut self, gnorm: T, step: &mut [T]) -> Result<bool, MPFitError> {
         // `trial_x` (length nfree) is the candidate next x (was wa2).
         // `work` (length nfree) is scratch for pnorm/prered computations (was wa3).
         // `trial_resid` (length m) is the residual at the trial point (was wa4).
@@ -1217,33 +1222,28 @@ where
         {
             self.info = MPFitInfo::ConvergenceBoth;
         }
-        if self.info != MPFitInfo::NotDone {
-            return Ok(MPFitDone::Exit);
+        // Only run the stringent-tolerance termination tests if we haven't
+        // already detected convergence above — otherwise these can downgrade
+        // the more-specific Convergence* info to MaxIterReached or a
+        // *NoImprovement variant.
+        if self.info == MPFitInfo::NotDone {
+            if self.cfg.max_fev > 0 && self.nfev >= self.cfg.max_fev {
+                self.info = MPFitInfo::MaxIterReached;
+            }
+            if self.iter >= self.cfg.max_iter {
+                self.info = MPFitInfo::MaxIterReached;
+            }
+            if actred.abs() <= T::EPSILON && prered <= T::EPSILON && ratio * T::HALF <= T::one() {
+                self.info = MPFitInfo::FtolNoImprovement;
+            }
+            if self.delta <= T::EPSILON * self.xnorm {
+                self.info = MPFitInfo::XtolNoImprovement;
+            }
+            if gnorm <= T::EPSILON {
+                self.info = MPFitInfo::GtolNoImprovement;
+            }
         }
-        // Tests for termination and stringent tolerances.
-        if self.cfg.max_fev > 0 && self.nfev >= self.cfg.max_fev {
-            self.info = MPFitInfo::MaxIterReached;
-        }
-        if self.iter >= self.cfg.max_iter {
-            self.info = MPFitInfo::MaxIterReached;
-        }
-        if actred.abs() <= T::EPSILON && prered <= T::EPSILON && ratio * T::HALF <= T::one() {
-            self.info = MPFitInfo::FtolNoImprovement;
-        }
-        if self.delta <= T::EPSILON * self.xnorm {
-            self.info = MPFitInfo::XtolNoImprovement;
-        }
-        if gnorm <= T::EPSILON {
-            self.info = MPFitInfo::GtolNoImprovement;
-        }
-        if self.info != MPFitInfo::NotDone {
-            return Ok(MPFitDone::Exit);
-        }
-        if ratio < T::P0001 {
-            Ok(MPFitDone::Inner)
-        } else {
-            Ok(MPFitDone::Outer)
-        }
+        Ok(ratio >= T::P0001)
     }
 
     pub fn nfree(&self) -> usize {
