@@ -42,11 +42,6 @@ pub struct MPFit<'a, T, U> {
     qanylim: bool,
     /// Model function to be evaluated
     model: &'a mut U,
-    /// Working arrays
-    wa1: Vec<T>,
-    wa2: Vec<T>,
-    wa3: Vec<T>,
-    wa4: Vec<T>,
     /// Array of length n which defines the permutation matrix p such that a*p = q*r.
     /// Column j of p is column ipvt(j) of the identity matrix.
     ipvt: Vec<usize>,
@@ -102,10 +97,6 @@ where
                 ulim: vec![],
                 qanylim: false,
                 model,
-                wa1: vec![T::zero(); npar],
-                wa2: vec![T::zero(); m],
-                wa3: vec![T::zero(); npar],
-                wa4: vec![T::zero(); m],
                 ipvt: vec![0; npar],
                 diag: vec![T::zero(); npar],
                 fnorm: -T::one(),
@@ -131,6 +122,7 @@ where
     pub fn fdjac2(&mut self) -> Result<(), MPFitError> {
         let eps = self.cfg.epsfcn.max(T::EPSILON).sqrt();
         self.fjac.fill(T::zero());
+        let mut perturbed = vec![T::zero(); self.m];
         let mut ij = 0;
         // Any parameters requiring numerical derivatives
         for j in 0..self.nfree {
@@ -154,11 +146,11 @@ where
                 h = -h;
             }
             self.xnew[free_p] = temp + h;
-            self.model.evaluate(&self.xnew, &mut self.wa4)?;
+            self.model.evaluate(&self.xnew, &mut perturbed)?;
             self.nfev += 1;
             self.xnew[free_p] = temp;
-            for (wa4, fvec) in self.wa4.iter().zip(&self.fvec) {
-                self.fjac[ij] = (*wa4 - *fvec) / h;
+            for (p, fvec) in perturbed.iter().zip(&self.fvec) {
+                self.fjac[ij] = (*p - *fvec) / h;
                 ij += 1;
             }
         }
@@ -182,12 +174,18 @@ where
     /// this transformation and the method of pivoting first
     /// appeared in the corresponding LINPACK subroutine.
     ///
-    pub fn qrfac(&mut self) {
+    pub fn qrfac(&mut self, rdiag: &mut [T], acnorm: &mut [T]) {
+        // `rdiag` receives the R diagonal (output, consumed by `transpose`).
+        // `acnorm` receives the original column norms of A (output, consumed
+        // by `scale`, `gnorm`, `rescale`).
+        // `norms` is internal scratch used to detect when norms need
+        // recomputing during pivoting.
+        let mut norms = vec![T::zero(); self.nfree];
         // Compute the initial column norms and initialize several arrays.
         for (j, ij) in (0..self.nfree).zip((0..self.m * self.nfree).step_by(self.m)) {
-            self.wa2[j] = self.fjac[ij..ij + self.m].enorm();
-            self.wa1[j] = self.wa2[j];
-            self.wa3[j] = self.wa1[j];
+            acnorm[j] = self.fjac[ij..ij + self.m].enorm();
+            rdiag[j] = acnorm[j];
+            norms[j] = rdiag[j];
             self.ipvt[j] = j;
         }
         // Reduce a to r with householder transformations.
@@ -195,7 +193,7 @@ where
             // Bring the column of largest norm into the pivot position.
             let mut kmax = j;
             for k in j..self.nfree {
-                if self.wa1[k] > self.wa1[kmax] {
+                if rdiag[k] > rdiag[kmax] {
                     kmax = k;
                 }
             }
@@ -207,15 +205,15 @@ where
                     ij += 1;
                     jj += 1;
                 }
-                self.wa1[kmax] = self.wa1[j];
-                self.wa3[kmax] = self.wa3[j];
+                rdiag[kmax] = rdiag[j];
+                norms[kmax] = norms[j];
                 self.ipvt.swap(j, kmax);
             }
             let jj = j + self.m * j;
             let jjj = self.m - j + jj;
             let mut ajnorm = self.fjac[jj..jjj].enorm();
             if ajnorm == T::zero() {
-                self.wa1[j] = -ajnorm;
+                rdiag[j] = -ajnorm;
                 continue;
             }
             if self.fjac[jj] < T::zero() {
@@ -247,20 +245,20 @@ where
                         ij += 1;
                         jj += 1;
                     }
-                    if self.wa1[k] != T::zero() {
-                        let temp = self.fjac[j + self.m * k] / self.wa1[k];
+                    if rdiag[k] != T::zero() {
+                        let temp = self.fjac[j + self.m * k] / rdiag[k];
                         let temp = (T::one() - temp.powi(2)).max(T::zero());
-                        self.wa1[k] *= temp.sqrt();
-                        let temp = self.wa1[k] / self.wa3[k];
+                        rdiag[k] *= temp.sqrt();
+                        let temp = rdiag[k] / norms[k];
                         if temp.powi(2) * T::P05 < T::EPSILON {
                             let start = jp1 + self.m * k;
-                            self.wa1[k] = self.fjac[start..start + self.m - j - 1].enorm();
-                            self.wa3[k] = self.wa1[k];
+                            rdiag[k] = self.fjac[start..start + self.m - j - 1].enorm();
+                            norms[k] = rdiag[k];
                         }
                     }
                 }
             }
-            self.wa1[j] = -ajnorm;
+            rdiag[j] = -ajnorm;
         }
     }
 
@@ -370,21 +368,22 @@ where
     /// to the norms of the columns of the initial Jacobian,
     /// calculate the norm of the scaled x, and initialize the step bound delta.
     ///
-    pub fn scale(&mut self) {
+    pub fn scale(&mut self, acnorm: &[T]) {
         if self.iter == 1 {
             if !self.cfg.do_user_scale {
                 for j in 0..self.nfree {
-                    self.diag[self.ifree[j]] = if self.wa2[j] == T::zero() {
+                    self.diag[self.ifree[j]] = if acnorm[j] == T::zero() {
                         T::one()
                     } else {
-                        self.wa2[j]
+                        acnorm[j]
                     };
                 }
             }
+            let mut scaled = vec![T::zero(); self.nfree];
             for j in 0..self.nfree {
-                self.wa3[j] = self.diag[self.ifree[j]] * self.x[j];
+                scaled[j] = self.diag[self.ifree[j]] * self.x[j];
             }
-            self.xnorm = self.wa3.enorm();
+            self.xnorm = scaled.enorm();
             self.delta = self.cfg.step_factor * self.xnorm;
             if self.delta == T::zero() {
                 self.delta = self.cfg.step_factor;
@@ -401,8 +400,8 @@ where
     ///
     /// Form (q transpose)*fvec and store the first n components in qtf.
     ///
-    pub fn transpose(&mut self) {
-        self.wa4.copy_from_slice(&self.fvec);
+    pub fn transpose(&mut self, rdiag: &[T]) {
+        let mut qtfvec = self.fvec.clone();
         let mut jj = 0;
         for j in 0..self.nfree {
             let temp = self.fjac[jj];
@@ -410,19 +409,19 @@ where
                 let mut sum = T::zero();
                 let mut ij = jj;
                 for i in j..self.m {
-                    sum += self.fjac[ij] * self.wa4[i];
+                    sum += self.fjac[ij] * qtfvec[i];
                     ij += 1;
                 }
                 let temp = -sum / temp;
                 ij = jj;
                 for i in j..self.m {
-                    self.wa4[i] += self.fjac[ij] * temp;
+                    qtfvec[i] += self.fjac[ij] * temp;
                     ij += 1;
                 }
             }
-            self.fjac[jj] = self.wa1[j];
+            self.fjac[jj] = rdiag[j];
             jj += self.m + 1;
-            self.qtf[j] = self.wa4[j];
+            self.qtf[j] = qtfvec[j];
         }
     }
 
@@ -437,20 +436,20 @@ where
     ///
     /// Compute the norm of the scaled gradient.
     ///
-    pub fn gnorm(&self) -> T {
+    pub fn gnorm(&self, acnorm: &[T]) -> T {
         let mut gnorm = T::zero();
         if self.fnorm != T::zero() {
             let mut jj = 0;
             for j in 0..self.nfree {
                 let l = self.ipvt[j];
-                if self.wa2[l] != T::zero() {
+                if acnorm[l] != T::zero() {
                     let mut sum = T::zero();
                     let mut ij = jj;
                     for i in 0..=j {
                         sum += self.fjac[ij] * (self.qtf[i] / self.fnorm);
                         ij += 1;
                     }
-                    gnorm = gnorm.max((sum / self.wa2[l]).abs());
+                    gnorm = gnorm.max((sum / acnorm[l]).abs());
                 }
                 jj += self.m;
             }
@@ -590,6 +589,7 @@ where
         }
         // For the full lower triangle of the covariance matrix
         // in the strict lower triangle or and in wa
+        let mut covar_diag = vec![T::zero(); self.nfree];
         for j in 0..self.nfree {
             let jj = self.ipvt[j];
             let sing = j as isize > l;
@@ -608,7 +608,7 @@ where
                     self.fjac[ii * self.m + jj] = self.fjac[ji];
                 }
             }
-            self.wa2[jj] = self.fjac[j0 + j];
+            covar_diag[jj] = self.fjac[j0 + j];
         }
         // Symmetrize the covariance matrix in r
         for j in 0..self.nfree {
@@ -616,16 +616,16 @@ where
             for i in 0..j {
                 self.fjac[j0 + i] = self.fjac[i * self.m + j];
             }
-            self.fjac[j0 + j] = self.wa2[j];
+            self.fjac[j0 + j] = covar_diag[j];
         }
         self
     }
 
-    pub fn rescale(&mut self) {
+    pub fn rescale(&mut self, acnorm: &[T]) {
         if !self.cfg.do_user_scale {
             for j in 0..self.nfree {
                 let i = self.ifree[j];
-                self.diag[i] = self.diag[i].max(self.wa2[j]);
+                self.diag[i] = self.diag[i].max(acnorm[j]);
             }
         }
     }
@@ -634,12 +634,12 @@ where
     /// Given an m by nfree matrix a, an nfree by nfree nonsingular diagonal
     /// matrix d, an m-vector b, and a positive number delta,
     /// the problem is to determine a value for the parameter
-    /// par such that if wa1 solves the system
+    /// par such that if `step` solves the system
     /// ```text
-    ///     a*wa1 = b ,   sqrt(par)*d*wa1 = 0
+    ///     a*step = b ,   sqrt(par)*d*step = 0
     /// ```
     /// in the least squares sense, and dxnorm is the Euclidean
-    /// norm of d*wa1, then either par is zero and
+    /// norm of d*step, then either par is zero and
     /// ```text
     ///     (dxnorm-delta) < 0.1*delta
     /// ```
@@ -666,18 +666,24 @@ where
     /// is reached, then the output par will contain the best
     /// value obtained so far.
     ///
-    pub fn lmpar(&mut self) {
-        // Compute and store in wa1 the Gauss-Newton direction. If the
+    pub fn lmpar(&mut self, step: &mut [T]) {
+        // `work` is a length-nfree scratch buffer (was wa3).
+        // `scaled_step` holds diag*step, used to compute dxnorm (was wa4).
+        // `sdiag` is the s-diagonal output of qrsolv (was wa2 in this context).
+        let mut work = vec![T::zero(); self.nfree];
+        let mut scaled_step = vec![T::zero(); self.nfree];
+        let mut sdiag = vec![T::zero(); self.nfree];
+        // Compute and store in `step` the Gauss-Newton direction. If the
         // Jacobian is rank-deficient, obtain a least squares solution.
         let mut nsing = self.nfree;
         let mut jj = 0;
         for j in 0..self.nfree {
-            self.wa3[j] = self.qtf[j];
+            work[j] = self.qtf[j];
             if self.fjac[jj] == T::zero() && nsing == self.nfree {
                 nsing = j;
             }
             if nsing < self.nfree {
-                self.wa3[j] = T::zero();
+                work[j] = T::zero();
             }
             jj += self.m + 1;
         }
@@ -685,26 +691,26 @@ where
             for k in 0..nsing {
                 let j = nsing - k - 1;
                 let mut ij = self.m * j;
-                self.wa3[j] /= self.fjac[j + ij];
-                let temp = self.wa3[j];
+                work[j] /= self.fjac[j + ij];
+                let temp = work[j];
                 if j > 0 {
                     for i in 0..j {
-                        self.wa3[i] -= self.fjac[ij] * temp;
+                        work[i] -= self.fjac[ij] * temp;
                         ij += 1;
                     }
                 }
             }
         }
         for j in 0..self.nfree {
-            self.wa1[self.ipvt[j]] = self.wa3[j];
+            step[self.ipvt[j]] = work[j];
         }
         // Initialize the iteration counter.
         // Evaluate the function at the origin, and test
         // for acceptance of the Gauss-Newton direction.
         for j in 0..self.nfree {
-            self.wa4[j] = self.diag[self.ifree[j]] * self.wa1[j];
+            scaled_step[j] = self.diag[self.ifree[j]] * step[j];
         }
-        let mut dxnorm = self.wa4[0..self.nfree].enorm();
+        let mut dxnorm = scaled_step.enorm();
         let mut fp = dxnorm - self.delta;
         if fp <= self.delta * T::P1 {
             self.par = T::zero();
@@ -715,21 +721,21 @@ where
         // the function. Otherwise set this bound to zero.
         let mut parl = T::zero();
         if nsing >= self.nfree {
-            self.newton_correction(dxnorm);
+            self.newton_correction(dxnorm, &scaled_step, &mut work);
             let mut jj = 0;
             for j in 0..self.nfree {
                 let mut sum = T::zero();
                 if j > 0 {
                     let mut ij = jj;
                     for i in 0..j {
-                        sum += self.fjac[ij] * self.wa3[i];
+                        sum += self.fjac[ij] * work[i];
                         ij += 1;
                     }
                 }
-                self.wa3[j] = (self.wa3[j] - sum) / self.fjac[j + self.m * j];
+                work[j] = (work[j] - sum) / self.fjac[j + self.m * j];
                 jj += self.m;
             }
-            let temp = self.wa3[0..self.nfree].enorm();
+            let temp = work.enorm();
             parl = ((fp / self.delta) / temp) / temp;
         }
         // Calculate an upper bound, paru, for the zero of the function.
@@ -742,10 +748,10 @@ where
                 ij += 1;
             }
             let l = self.ipvt[j];
-            self.wa3[j] = sum / self.diag[self.ifree[l]];
+            work[j] = sum / self.diag[self.ifree[l]];
             jj += self.m;
         }
-        let gnorm = self.wa3[0..self.nfree].enorm();
+        let gnorm = work.enorm();
         let mut paru = gnorm / self.delta;
         if paru == T::zero() {
             paru = T::MIN_POSITIVE / self.delta.min(T::P1);
@@ -765,13 +771,13 @@ where
             }
             let temp = self.par.sqrt();
             for j in 0..self.nfree {
-                self.wa3[j] = temp * self.diag[self.ifree[j]];
+                work[j] = temp * self.diag[self.ifree[j]];
             }
-            self.qrsolv();
+            self.qrsolv(&work, step, &mut sdiag);
             for j in 0..self.nfree {
-                self.wa4[j] = self.diag[self.ifree[j]] * self.wa1[j];
+                scaled_step[j] = self.diag[self.ifree[j]] * step[j];
             }
-            dxnorm = self.wa4[0..self.nfree].enorm();
+            dxnorm = scaled_step.enorm();
             let temp = fp;
             fp = dxnorm - self.delta;
             // If the function is small enough, accept the current value
@@ -783,22 +789,22 @@ where
             {
                 return;
             }
-            self.newton_correction(dxnorm);
+            self.newton_correction(dxnorm, &scaled_step, &mut work);
             jj = 0;
             for j in 0..self.nfree {
-                self.wa3[j] /= self.wa2[j];
-                let temp = self.wa3[j];
+                work[j] /= sdiag[j];
+                let temp = work[j];
                 let jp1 = j + 1;
                 if jp1 < self.nfree {
                     let mut ij = jp1 + jj;
                     for i in jp1..self.nfree {
-                        self.wa3[i] -= self.fjac[ij] * temp;
+                        work[i] -= self.fjac[ij] * temp;
                         ij += 1;
                     }
                 }
                 jj += self.m;
             }
-            let temp = self.wa3[0..self.nfree].enorm();
+            let temp = work.enorm();
             let parc = ((fp / self.delta) / temp) / temp;
             // Depending on the sign of the function, update parl or paru.
             if fp > T::zero() {
@@ -815,10 +821,10 @@ where
     ///
     /// Compute the Newton correction.
     ///
-    fn newton_correction(&mut self, dxnorm: T) {
+    fn newton_correction(&self, dxnorm: T, scaled_step: &[T], work: &mut [T]) {
         for j in 0..self.nfree {
             let l = self.ipvt[j];
-            self.wa3[j] = self.diag[self.ifree[l]] * (self.wa4[l] / dxnorm);
+            work[j] = self.diag[self.ifree[l]] * (scaled_step[l] / dxnorm);
         }
     }
 
@@ -851,9 +857,17 @@ where
     /// ```
     /// s is computed within qrsolv and may be of separate interest.
     ///
-    fn qrsolv(&mut self) {
+    fn qrsolv(&mut self, dpar: &[T], step: &mut [T], sdiag: &mut [T]) {
+        // `dpar` is the input sqrt(par)*diag (length nfree).
+        // `step` is the output LM step (length nfree), permuted back at end.
+        // `sdiag` is the output s-diagonal (length nfree), used by lmpar.
+        // `qtb` (length nfree) is local: a working copy of qtf that becomes z.
+        // `r_diag` (length nfree) is local: temporary save of R diagonal which
+        // is restored at the end so `fjac` is unchanged on exit.
+        let mut qtb = vec![T::zero(); self.nfree];
+        let mut r_diag = vec![T::zero(); self.nfree];
         // Copy r and (q transpose)*b to preserve input and initialize s.
-        // in particular, save the diagonal elements of r in x.
+        // in particular, save the diagonal elements of r in r_diag.
         let mut kk = 0;
         for j in 0..self.nfree {
             let mut ij = kk;
@@ -863,8 +877,8 @@ where
                 ij += 1;
                 ik += self.m;
             }
-            self.wa1[j] = self.fjac[kk];
-            self.wa4[j] = self.qtf[j];
+            r_diag[j] = self.fjac[kk];
+            qtb[j] = self.qtf[j];
             kk += self.m + 1;
         }
         // Eliminate the diagonal matrix d using a givens rotation.
@@ -872,11 +886,11 @@ where
             // Prepare the row of d to be eliminated, locating the
             // diagonal element using p from the qr factorization.
             let l = self.ipvt[j];
-            if self.wa3[l] != T::zero() {
+            if dpar[l] != T::zero() {
                 for k in j..self.nfree {
-                    self.wa2[k] = T::zero();
+                    sdiag[k] = T::zero();
                 }
-                self.wa2[j] = self.wa3[l];
+                sdiag[j] = dpar[l];
                 // The transformations to eliminate the row of d
                 // modify only a single element of (q transpose)*b
                 // beyond the first n, which is initially zero.
@@ -884,34 +898,34 @@ where
                 for k in j..self.nfree {
                     // Determine a givens rotation which eliminates the
                     // appropriate element in the current row of d.
-                    if self.wa2[k] == T::zero() {
+                    if sdiag[k] == T::zero() {
                         continue;
                     }
                     let kk = k + self.m * k;
-                    let (sinx, cosx) = if self.fjac[kk].abs() < self.wa2[k].abs() {
-                        let cotan = self.fjac[kk] / self.wa2[k];
+                    let (sinx, cosx) = if self.fjac[kk].abs() < sdiag[k].abs() {
+                        let cotan = self.fjac[kk] / sdiag[k];
                         let sinx = T::HALF / (cotan * cotan * T::P25 + T::P25).sqrt();
                         let cosx = sinx * cotan;
                         (sinx, cosx)
                     } else {
-                        let tanx = self.wa2[k] / self.fjac[kk];
+                        let tanx = sdiag[k] / self.fjac[kk];
                         let cosx = T::HALF / (tanx * tanx * T::P25 + T::P25).sqrt();
                         let sinx = cosx * tanx;
                         (sinx, cosx)
                     };
                     // Compute the modified diagonal element of r and
                     // the modified element of ((q transpose)*b,0).
-                    self.fjac[kk] = cosx * self.fjac[kk] + sinx * self.wa2[k];
-                    let temp = cosx * self.wa4[k] + sinx * qtbpj;
-                    qtbpj = -sinx * self.wa4[k] + cosx * qtbpj;
-                    self.wa4[k] = temp;
+                    self.fjac[kk] = cosx * self.fjac[kk] + sinx * sdiag[k];
+                    let temp = cosx * qtb[k] + sinx * qtbpj;
+                    qtbpj = -sinx * qtb[k] + cosx * qtbpj;
+                    qtb[k] = temp;
                     // Accumulate the transformation in the row of s.
                     let kp1 = k + 1;
                     if self.nfree > kp1 {
                         let mut ik = kk + 1;
                         for i in kp1..self.nfree {
-                            let temp = cosx * self.fjac[ik] + sinx * self.wa2[i];
-                            self.wa2[i] = -sinx * self.fjac[ik] + cosx * self.wa2[i];
+                            let temp = cosx * self.fjac[ik] + sinx * sdiag[i];
+                            sdiag[i] = -sinx * self.fjac[ik] + cosx * sdiag[i];
                             self.fjac[ik] = temp;
                             ik += 1;
                         }
@@ -921,18 +935,18 @@ where
             // Store the diagonal element of s and restore
             // the corresponding diagonal element of r.
             let kk = j + self.m * j;
-            self.wa2[j] = self.fjac[kk];
-            self.fjac[kk] = self.wa1[j];
+            sdiag[j] = self.fjac[kk];
+            self.fjac[kk] = r_diag[j];
         }
         // Solve the triangular system for z. if the system is
         // singular, then obtain a least squares solution.
         let mut nsing = self.nfree;
         for j in 0..self.nfree {
-            if self.wa2[j] == T::zero() && nsing == self.nfree {
+            if sdiag[j] == T::zero() && nsing == self.nfree {
                 nsing = j;
             }
             if nsing < self.nfree {
-                self.wa4[j] = T::zero();
+                qtb[j] = T::zero();
             }
         }
         if nsing > 0 {
@@ -943,28 +957,34 @@ where
                 if nsing > jp1 {
                     let mut ij = jp1 + self.m * j;
                     for i in jp1..nsing {
-                        sum += self.fjac[ij] * self.wa4[i];
+                        sum += self.fjac[ij] * qtb[i];
                         ij += 1;
                     }
                 }
-                self.wa4[j] = (self.wa4[j] - sum) / self.wa2[j];
+                qtb[j] = (qtb[j] - sum) / sdiag[j];
             }
         }
         // Permute the components of z back to components of x.
         for j in 0..self.nfree {
-            self.wa1[self.ipvt[j]] = self.wa4[j];
+            step[self.ipvt[j]] = qtb[j];
         }
     }
 
-    pub fn iterate(&mut self, gnorm: T) -> Result<MPFitDone, MPFitError> {
+    pub fn iterate(&mut self, gnorm: T, step: &mut [T]) -> Result<MPFitDone, MPFitError> {
+        // `trial_x` (length nfree) is the candidate next x (was wa2).
+        // `work` (length nfree) is scratch for pnorm/prered computations (was wa3).
+        // `trial_resid` (length m) is the residual at the trial point (was wa4).
+        let mut trial_x = vec![T::zero(); self.nfree];
+        let mut work = vec![T::zero(); self.nfree];
+        let mut trial_resid = vec![T::zero(); self.m];
         for j in 0..self.nfree {
-            self.wa1[j] = -self.wa1[j];
+            step[j] = -step[j];
         }
         let mut alpha = T::one();
         if !self.qanylim {
-            // No parameter limits, so just move to new position WA2
+            // No parameter limits, so just move to new position.
             for j in 0..self.nfree {
-                self.wa2[j] = self.x[j] + self.wa1[j];
+                trial_x[j] = self.x[j] + step[j];
             }
         } else {
             // Respect the limits. If a step were to go out of bounds, then
@@ -973,24 +993,24 @@ where
             for j in 0..self.nfree {
                 let lpegged = self.qllim[j] && self.x[j] <= self.llim[j];
                 let upegged = self.qulim[j] && self.x[j] >= self.ulim[j];
-                let dwa1 = self.wa1[j].abs() > T::EPSILON;
-                if lpegged && self.wa1[j] < T::zero() {
-                    self.wa1[j] = T::zero();
+                let dstep = step[j].abs() > T::EPSILON;
+                if lpegged && step[j] < T::zero() {
+                    step[j] = T::zero();
                 }
-                if upegged && self.wa1[j] > T::zero() {
-                    self.wa1[j] = T::zero();
+                if upegged && step[j] > T::zero() {
+                    step[j] = T::zero();
                 }
-                if dwa1 && self.qllim[j] && self.x[j] + self.wa1[j] < self.llim[j] {
-                    alpha = alpha.min((self.llim[j] - self.x[j]) / self.wa1[j]);
+                if dstep && self.qllim[j] && self.x[j] + step[j] < self.llim[j] {
+                    alpha = alpha.min((self.llim[j] - self.x[j]) / step[j]);
                 }
-                if dwa1 && self.qulim[j] && self.x[j] + self.wa1[j] > self.ulim[j] {
-                    alpha = alpha.min((self.ulim[j] - self.x[j]) / self.wa1[j]);
+                if dstep && self.qulim[j] && self.x[j] + step[j] > self.ulim[j] {
+                    alpha = alpha.min((self.ulim[j] - self.x[j]) / step[j]);
                 }
             }
             // Scale the resulting vector, advance to the next position
             for j in 0..self.nfree {
-                self.wa1[j] *= alpha;
-                self.wa2[j] = self.x[j] + self.wa1[j];
+                step[j] *= alpha;
+                trial_x[j] = self.x[j] + step[j];
                 // Adjust the output values. If the step put us exactly
                 // on a boundary, make sure it is exact.
                 let sgnu = if self.ulim[j] >= T::zero() {
@@ -1015,29 +1035,29 @@ where
                     } else {
                         T::zero()
                     };
-                if self.qulim[j] && self.wa2[j] >= ulim1 {
-                    self.wa2[j] = self.ulim[j];
+                if self.qulim[j] && trial_x[j] >= ulim1 {
+                    trial_x[j] = self.ulim[j];
                 }
-                if self.qllim[j] && self.wa2[j] <= llim1 {
-                    self.wa2[j] = self.llim[j];
+                if self.qllim[j] && trial_x[j] <= llim1 {
+                    trial_x[j] = self.llim[j];
                 }
             }
         }
         for j in 0..self.nfree {
-            self.wa3[j] = self.diag[self.ifree[j]] * self.wa1[j];
+            work[j] = self.diag[self.ifree[j]] * step[j];
         }
-        let pnorm = self.wa3[0..self.nfree].enorm();
+        let pnorm = work.enorm();
         // On the first iteration, adjust the initial step bound.
         if self.iter == 1 {
             self.delta = self.delta.min(pnorm);
         }
         // Evaluate the function at x + p and calculate its norm.
         for i in 0..self.nfree {
-            self.xnew[self.ifree[i]] = self.wa2[i];
+            self.xnew[self.ifree[i]] = trial_x[i];
         }
-        self.model.evaluate(&self.xnew, &mut self.wa4)?;
+        self.model.evaluate(&self.xnew, &mut trial_resid)?;
         self.nfev += 1;
-        self.fnorm1 = self.wa4[0..self.m].enorm();
+        self.fnorm1 = trial_resid.enorm();
         // Compute the scaled actual reduction.
         let actred = if self.fnorm1 * T::P1 < self.fnorm {
             let temp = self.fnorm1 / self.fnorm;
@@ -1049,19 +1069,19 @@ where
         // the scaled directional derivative.
         let mut jj = 0;
         for j in 0..self.nfree {
-            self.wa3[j] = T::zero();
+            work[j] = T::zero();
             let l = self.ipvt[j];
-            let temp = self.wa1[l];
+            let temp = step[l];
             let mut ij = jj;
             for i in 0..=j {
-                self.wa3[i] += self.fjac[ij] * temp;
+                work[i] += self.fjac[ij] * temp;
                 ij += 1;
             }
             jj += self.m;
         }
         // Remember, alpha is the fraction of the full LM step actually
         // taken.
-        let temp1 = self.wa3[0..self.nfree].enorm() * alpha / self.fnorm;
+        let temp1 = work.enorm() * alpha / self.fnorm;
         let temp2 = ((alpha * self.par).sqrt() * pnorm) / self.fnorm;
         let temp11 = temp1 * temp1;
         let temp22 = temp2 * temp2;
@@ -1094,13 +1114,11 @@ where
         if ratio >= T::P0001 {
             // Successful iteration. update x, fvec, and their norms.
             for j in 0..self.nfree {
-                self.x[j] = self.wa2[j];
-                self.wa2[j] = self.diag[self.ifree[j]] * self.x[j];
+                self.x[j] = trial_x[j];
+                work[j] = self.diag[self.ifree[j]] * self.x[j];
             }
-            for i in 0..self.m {
-                self.fvec[i] = self.wa4[i];
-            }
-            self.xnorm = self.wa2[0..self.nfree].enorm();
+            self.fvec.copy_from_slice(&trial_resid);
+            self.xnorm = work.enorm();
             self.fnorm = self.fnorm1;
             self.iter += 1;
         }
@@ -1145,6 +1163,10 @@ where
         } else {
             Ok(MPFitDone::Outer)
         }
+    }
+
+    pub fn nfree(&self) -> usize {
+        self.nfree
     }
 
     pub fn check_config(&self) -> Result<(), MPFitError> {

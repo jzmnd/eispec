@@ -80,17 +80,22 @@ where
         fit.parse_parameters()?;
         fit.init_lm()?;
 
+        let nfree = fit.nfree();
+        let mut rdiag = vec![T::zero(); nfree];
+        let mut acnorm = vec![T::zero(); nfree];
+        let mut step = vec![T::zero(); nfree];
+
         loop {
             fit.fill_xnew();
             fit.fdjac2()?;
             fit.check_limits();
-            fit.qrfac();
-            fit.scale();
-            fit.transpose();
+            fit.qrfac(&mut rdiag, &mut acnorm);
+            fit.scale(&acnorm);
+            fit.transpose(&rdiag);
             if !fit.check_is_finite() {
                 return Err(MPFitError::Nan);
             }
-            let gnorm = fit.gnorm();
+            let gnorm = fit.gnorm(&acnorm);
             if gnorm <= config.gtol {
                 fit.info = MPFitInfo::ConvergenceDir;
             }
@@ -101,10 +106,10 @@ where
                 fit.info = MPFitInfo::MaxIterReached;
                 return fit.terminate();
             }
-            fit.rescale();
+            fit.rescale(&acnorm);
             loop {
-                fit.lmpar();
-                match fit.iterate(gnorm)? {
+                fit.lmpar(&mut step);
+                match fit.iterate(gnorm, &mut step)? {
                     MPFitDone::Exit => return fit.terminate(),
                     MPFitDone::Inner => continue,
                     MPFitDone::Outer => break,
