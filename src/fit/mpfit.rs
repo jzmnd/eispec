@@ -53,7 +53,7 @@ pub struct MPFit<'a, T, U> {
     /// Variable which specifies an upper bound on the Euclidean norm of d*x
     delta: T,
     /// Fit info
-    pub info: MPFitInfo,
+    info: MPFitInfo,
     orig_norm: T,
     par: T,
     /// Number of iterations of the algorithm
@@ -67,45 +67,166 @@ where
     T: NumAssign + FloatConst,
     U: ImpedanceModel<T>,
 {
-    pub fn new(
+    ///
+    /// Build a fully-initialised `MPFit` ready to drive iterations:
+    /// validates the config, parses per-parameter bounds/fixed-vs-free
+    /// status, and performs the initial model evaluation.
+    ///
+    pub fn try_new(
         model: &'a mut U,
         xall: &'a mut [T],
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
         let m = model.get_freqs().len();
-        let npar = xall.len();
         if m == 0 {
-            Err(MPFitError::Empty)
-        } else {
-            Ok(Self {
-                m,
-                npar,
-                nfree: 0,
-                ifree: vec![],
-                fvec: vec![T::zero(); m],
-                nfev: 1,
-                xnew: vec![T::zero(); npar],
-                x: vec![],
-                xall,
-                qtf: vec![],
-                fjac: JacMatrix::empty(),
-                step: vec![],
-                dstep: vec![],
-                bounds: vec![],
-                qanylim: false,
-                model,
-                ipvt: vec![0; npar],
-                diag: vec![T::zero(); npar],
-                fnorm: -T::one(),
-                fnorm1: -T::one(),
-                xnorm: -T::one(),
-                delta: T::zero(),
-                info: MPFitInfo::NotDone,
-                orig_norm: T::zero(),
-                par: T::zero(),
-                iter: 1,
-                cfg,
-            })
+            return Err(MPFitError::Empty);
+        }
+        let npar = xall.len();
+        let mut fit = Self::new(m, npar, model, xall, cfg);
+        fit.check_config()?;
+        fit.parse_parameters()?;
+        fit.init_lm()?;
+        Ok(fit)
+    }
+
+    fn new(
+        m: usize,
+        npar: usize,
+        model: &'a mut U,
+        xall: &'a mut [T],
+        cfg: &'a MPFitConfig<T>,
+    ) -> Self {
+        Self {
+            m,
+            npar,
+            nfree: 0,
+            ifree: vec![],
+            fvec: vec![T::zero(); m],
+            nfev: 1,
+            xnew: vec![T::zero(); npar],
+            x: vec![],
+            xall,
+            qtf: vec![],
+            fjac: JacMatrix::empty(),
+            step: vec![],
+            dstep: vec![],
+            bounds: vec![],
+            qanylim: false,
+            model,
+            ipvt: vec![0; npar],
+            diag: vec![T::zero(); npar],
+            fnorm: -T::one(),
+            fnorm1: -T::one(),
+            xnorm: -T::one(),
+            delta: T::zero(),
+            info: MPFitInfo::NotDone,
+            orig_norm: T::zero(),
+            par: T::zero(),
+            iter: 1,
+            cfg,
+        }
+    }
+
+    fn check_config(&self) -> Result<(), MPFitError> {
+        if self.cfg.ftol <= T::zero()
+            || self.cfg.xtol <= T::zero()
+            || self.cfg.step_factor <= T::zero()
+        {
+            return Err(MPFitError::Input);
+        }
+        if self.m < self.nfree {
+            return Err(MPFitError::DoF);
+        }
+        Ok(())
+    }
+
+    ///
+    /// Parse and validate the model parameters.
+    ///
+    fn parse_parameters(&mut self) -> Result<(), MPFitError> {
+        match &self.model.get_parameters() {
+            None => {
+                self.nfree = self.npar;
+                self.ifree = (0..self.npar).collect();
+                self.bounds = vec![ParameterBounds::default(); self.npar];
+            }
+            Some(pars) => {
+                if pars.is_empty() {
+                    return Err(MPFitError::Empty);
+                }
+                for (i, p) in pars.iter().enumerate() {
+                    if !p.fit {
+                        if p.bounds.lower.is_some_and(|x| self.xall[i] < x)
+                            || p.bounds.upper.is_some_and(|x| self.xall[i] > x)
+                        {
+                            return Err(MPFitError::InitBounds);
+                        }
+                    } else {
+                        if p.bounds.lower.is_some()
+                            && p.bounds.upper.is_some()
+                            && p.bounds.lower >= p.bounds.upper
+                        {
+                            return Err(MPFitError::Bounds);
+                        }
+                        self.nfree += 1;
+                        self.ifree.push(i);
+                        self.bounds.push(p.bounds);
+                        if p.bounds.lower.is_some() || p.bounds.upper.is_some() {
+                            self.qanylim = true;
+                        }
+                    }
+                    self.step.push(T::zero());
+                    self.dstep.push(T::zero());
+                }
+                if self.nfree == 0 {
+                    return Err(MPFitError::NoFree);
+                }
+            }
+        };
+        if self.m < self.nfree {
+            return Err(MPFitError::DoF);
+        }
+        Ok(())
+    }
+
+    ///
+    /// Initialize Levenberg-Marquardt parameters and iteration counter.
+    ///
+    fn init_lm(&mut self) -> Result<(), MPFitError> {
+        self.model.evaluate(self.xall, &mut self.fvec)?;
+        self.nfev += 1;
+        self.fnorm = self.fvec.enorm();
+        self.orig_norm = self.fnorm * self.fnorm;
+        self.xnew.copy_from_slice(self.xall);
+        self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
+        self.qtf = vec![T::zero(); self.nfree];
+        self.fjac = JacMatrix::zeros(self.m, self.nfree);
+
+        Ok(())
+    }
+
+    ///
+    /// Check if parameters are pegged at their upper/lower limits.
+    ///
+    pub fn check_limits(&mut self) {
+        if self.qanylim {
+            for j in 0..self.nfree {
+                let bound = self.bounds[j];
+                let lpegged = bound.lower.is_some_and(|l| self.x[j] == l);
+                let upegged = bound.upper.is_some_and(|u| self.x[j] == u);
+                let mut sum = T::zero();
+                // If the parameter is pegged at a limit, compute the gradient direction
+                if lpegged || upegged {
+                    for (&f, &jc) in self.fvec.iter().zip(self.fjac.col(j)) {
+                        sum += f * jc;
+                    }
+                }
+                // If pegged at a limit and gradient is in the disallowed direction,
+                // zero out the column.
+                if (lpegged && sum > T::zero()) || (upegged && sum < T::zero()) {
+                    self.fjac.col_mut(j).fill(T::zero());
+                }
+            }
         }
     }
 
@@ -248,96 +369,6 @@ where
                 }
             }
             rdiag[j] = -ajnorm;
-        }
-    }
-
-    ///
-    /// Parse and validate the model parameters.
-    ///
-    pub fn parse_parameters(&mut self) -> Result<(), MPFitError> {
-        match &self.model.get_parameters() {
-            None => {
-                self.nfree = self.npar;
-                self.ifree = (0..self.npar).collect();
-                self.bounds = vec![ParameterBounds::default(); self.npar];
-            }
-            Some(pars) => {
-                if pars.is_empty() {
-                    return Err(MPFitError::Empty);
-                }
-                for (i, p) in pars.iter().enumerate() {
-                    if !p.fit {
-                        if p.bounds.lower.is_some_and(|x| self.xall[i] < x)
-                            || p.bounds.upper.is_some_and(|x| self.xall[i] > x)
-                        {
-                            return Err(MPFitError::InitBounds);
-                        }
-                    } else {
-                        if p.bounds.lower.is_some()
-                            && p.bounds.upper.is_some()
-                            && p.bounds.lower >= p.bounds.upper
-                        {
-                            return Err(MPFitError::Bounds);
-                        }
-                        self.nfree += 1;
-                        self.ifree.push(i);
-                        self.bounds.push(p.bounds);
-                        if p.bounds.lower.is_some() || p.bounds.upper.is_some() {
-                            self.qanylim = true;
-                        }
-                    }
-                    self.step.push(T::zero());
-                    self.dstep.push(T::zero());
-                }
-                if self.nfree == 0 {
-                    return Err(MPFitError::NoFree);
-                }
-            }
-        };
-        if self.m < self.nfree {
-            return Err(MPFitError::DoF);
-        }
-        Ok(())
-    }
-
-    ///
-    /// Initialize Levenberg-Marquardt parameters and iteration counter.
-    ///
-    pub fn init_lm(&mut self) -> Result<(), MPFitError> {
-        self.model.evaluate(self.xall, &mut self.fvec)?;
-        self.nfev += 1;
-        self.fnorm = self.fvec.enorm();
-        self.orig_norm = self.fnorm * self.fnorm;
-        self.xnew.copy_from_slice(self.xall);
-        self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
-        self.qtf = vec![T::zero(); self.nfree];
-        self.fjac = JacMatrix::zeros(self.m, self.nfree);
-
-        Ok(())
-    }
-
-    ///
-    /// Check if parameters are pegged at their upper/lower limits.
-    ///
-    pub fn check_limits(&mut self) {
-        if self.qanylim {
-            for j in 0..self.nfree {
-                let bound = self.bounds[j];
-                let lpegged = bound.lower.is_some_and(|l| self.x[j] == l);
-                let upegged = bound.upper.is_some_and(|u| self.x[j] == u);
-                let mut sum = T::zero();
-                // If the parameter is pegged at a limit, compute the gradient direction
-                if lpegged || upegged {
-                    for (&f, &jc) in self.fvec.iter().zip(self.fjac.col(j)) {
-                        sum += f * jc;
-                    }
-                }
-                // If pegged at a limit and gradient is in the disallowed direction,
-                // zero out the column.
-                if (lpegged && sum > T::zero()) || (upegged && sum < T::zero()) {
-                    self.fjac.col_mut(j).fill(T::zero());
-                }
-            }
         }
     }
 
@@ -758,8 +789,10 @@ where
         ((fp / self.delta) / temp) / temp
     }
 
+    ///
     /// Compute the upper bracket `paru` on the LM parameter from the
     /// scaled gradient norm. Returns `(gnorm, paru)`.
+    ///
     fn compute_paru(&self, work: &mut [T]) -> (T, T) {
         let mut jj = 0;
         for j in 0..self.nfree {
@@ -1200,20 +1233,23 @@ where
         }
     }
 
-    pub fn nfree(&self) -> usize {
-        self.nfree
+    pub fn check_convergence_ortho(&mut self, acnorm: &[T]) {
+        if self.gnorm(acnorm) <= self.cfg.gtol {
+            self.info = MPFitInfo::ConvergenceDir;
+        }
     }
 
-    pub fn check_config(&self) -> Result<(), MPFitError> {
-        if self.cfg.ftol <= T::zero()
-            || self.cfg.xtol <= T::zero()
-            || self.cfg.step_factor <= T::zero()
-        {
-            return Err(MPFitError::Input);
+    pub fn check_no_iter(&mut self) {
+        if self.cfg.max_iter == 0 {
+            self.info = MPFitInfo::MaxIterReached;
         }
-        if self.m < self.nfree {
-            return Err(MPFitError::DoF);
-        }
-        Ok(())
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.info != MPFitInfo::NotDone
+    }
+
+    pub fn nfree(&self) -> usize {
+        self.nfree
     }
 }

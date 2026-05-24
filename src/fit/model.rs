@@ -7,7 +7,7 @@ use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::data::ImpedanceDataAccessors;
 use crate::fit::config::MPFitConfig;
-use crate::fit::enums::{MPFitError, MPFitInfo};
+use crate::fit::enums::MPFitError;
 use crate::fit::mpfit::MPFit;
 use crate::fit::status::MPFitStatus;
 
@@ -74,11 +74,7 @@ where
             .collect();
 
         let config = self.config();
-        let mut fit = MPFit::new(self, &mut init, &config)?;
-
-        fit.check_config()?;
-        fit.parse_parameters()?;
-        fit.init_lm()?;
+        let mut fit = MPFit::try_new(self, &mut init, &config)?;
 
         let nfree = fit.nfree();
         let mut rdiag = vec![T::zero(); nfree];
@@ -95,22 +91,17 @@ where
             if !fit.check_is_finite() {
                 return Err(MPFitError::Nan);
             }
+            fit.check_convergence_ortho(&acnorm);
+            fit.check_no_iter();
+            if fit.is_done() {
+                return fit.terminate();
+            }
             let gnorm = fit.gnorm(&acnorm);
-            if gnorm <= config.gtol {
-                fit.info = MPFitInfo::ConvergenceDir;
-            }
-            if fit.info != MPFitInfo::NotDone {
-                return fit.terminate();
-            }
-            if config.max_iter == 0 {
-                fit.info = MPFitInfo::MaxIterReached;
-                return fit.terminate();
-            }
             fit.rescale(&acnorm);
             loop {
                 fit.lmpar(&mut step);
                 let accepted = fit.iterate(gnorm, &mut step)?;
-                if fit.info != MPFitInfo::NotDone {
+                if fit.is_done() {
                     return fit.terminate();
                 }
                 if accepted {

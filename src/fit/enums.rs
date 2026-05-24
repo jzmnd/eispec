@@ -5,7 +5,7 @@
 use std::fmt;
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum MPFitInfo {
     /// Not finished iterations
     NotDone,
