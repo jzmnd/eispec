@@ -3,124 +3,15 @@
 //! Rust implementation of [CMPFIT](https://pages.physics.wisc.edu/~craigm/idl/cmpfit.html)
 //!
 use crate::fit::config::MPFitConfig;
+use crate::fit::jacobian::JacMatrix;
 use crate::fit::status::MPFitStatus;
+use crate::fit::ParameterBounds;
 use num::traits::NumAssign;
 
 use crate::constants::FloatConst;
 use crate::fit::enorm::ENorm;
 use crate::fit::enums::{MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
-use std::ops::{Index, IndexMut, Range};
-
-#[derive(Debug, Clone, Copy)]
-struct ParamBound<T> {
-    lower: Option<T>,
-    upper: Option<T>,
-}
-
-impl<T> Default for ParamBound<T> {
-    fn default() -> Self {
-        Self {
-            lower: None,
-            upper: None,
-        }
-    }
-}
-
-/// Column-major matrix storing the Jacobian (and in-place factorisations of it).
-///
-/// Exposes three indexing forms:
-/// - `m[k]`         — flat (column-major) for tight running-index loops
-/// - `m[(i, j)]`    — 2D element access
-/// - `m[a..b]`      — flat slice range, for `enorm()` and `iter_mut()`
-#[derive(Debug, Clone)]
-struct JacMatrix<T> {
-    data: Vec<T>,
-    rows: usize,
-}
-
-impl<T: FloatConst> JacMatrix<T> {
-    fn empty() -> Self {
-        Self {
-            data: vec![],
-            rows: 0,
-        }
-    }
-
-    fn zeros(rows: usize, cols: usize) -> Self {
-        Self {
-            data: vec![T::zero(); rows * cols],
-            rows,
-        }
-    }
-
-    fn fill(&mut self, val: T) {
-        self.data.fill(val);
-    }
-
-    fn iter(&self) -> std::slice::Iter<'_, T> {
-        self.data.iter()
-    }
-
-    fn col(&self, j: usize) -> &[T] {
-        let start = j * self.rows;
-        &self.data[start..start + self.rows]
-    }
-
-    fn col_mut(&mut self, j: usize) -> &mut [T] {
-        let start = j * self.rows;
-        &mut self.data[start..start + self.rows]
-    }
-
-    fn swap_cols(&mut self, a: usize, b: usize) {
-        if a == b {
-            return;
-        }
-        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
-        let (left, right) = self.data.split_at_mut(hi * self.rows);
-        let lo_start = lo * self.rows;
-        left[lo_start..lo_start + self.rows].swap_with_slice(&mut right[..self.rows]);
-    }
-}
-
-impl<T> Index<usize> for JacMatrix<T> {
-    type Output = T;
-    fn index(&self, k: usize) -> &T {
-        &self.data[k]
-    }
-}
-
-impl<T> IndexMut<usize> for JacMatrix<T> {
-    fn index_mut(&mut self, k: usize) -> &mut T {
-        &mut self.data[k]
-    }
-}
-
-impl<T> Index<(usize, usize)> for JacMatrix<T> {
-    type Output = T;
-    fn index(&self, (i, j): (usize, usize)) -> &T {
-        &self.data[j * self.rows + i]
-    }
-}
-
-impl<T> IndexMut<(usize, usize)> for JacMatrix<T> {
-    fn index_mut(&mut self, (i, j): (usize, usize)) -> &mut T {
-        &mut self.data[j * self.rows + i]
-    }
-}
-
-impl<T> Index<Range<usize>> for JacMatrix<T> {
-    type Output = [T];
-    fn index(&self, r: Range<usize>) -> &[T] {
-        &self.data[r]
-    }
-}
-
-impl<T> IndexMut<Range<usize>> for JacMatrix<T> {
-    fn index_mut(&mut self, r: Range<usize>) -> &mut [T] {
-        &mut self.data[r]
-    }
-}
 
 pub struct MPFit<'a, T, U> {
     /// Number of data points to be fit
@@ -146,7 +37,7 @@ pub struct MPFit<'a, T, U> {
     step: Vec<T>,
     dstep: Vec<T>,
     /// Per-free-parameter lower/upper bounds (`None` means unbounded on that side).
-    bounds: Vec<ParamBound<T>>,
+    bounds: Vec<ParameterBounds<T>>,
     /// Cached: true if any free parameter has at least one limit.
     qanylim: bool,
     /// Model function to be evaluated
@@ -368,7 +259,7 @@ where
             None => {
                 self.nfree = self.npar;
                 self.ifree = (0..self.npar).collect();
-                self.bounds = vec![ParamBound::default(); self.npar];
+                self.bounds = vec![ParameterBounds::default(); self.npar];
             }
             Some(pars) => {
                 if pars.is_empty() {
@@ -376,25 +267,22 @@ where
                 }
                 for (i, p) in pars.iter().enumerate() {
                     if !p.fit {
-                        if p.limit_lower.is_some_and(|x| self.xall[i] < x)
-                            || p.limit_upper.is_some_and(|x| self.xall[i] > x)
+                        if p.bounds.lower.is_some_and(|x| self.xall[i] < x)
+                            || p.bounds.upper.is_some_and(|x| self.xall[i] > x)
                         {
                             return Err(MPFitError::InitBounds);
                         }
                     } else {
-                        if p.limit_lower.is_some()
-                            && p.limit_upper.is_some()
-                            && p.limit_lower >= p.limit_upper
+                        if p.bounds.lower.is_some()
+                            && p.bounds.upper.is_some()
+                            && p.bounds.lower >= p.bounds.upper
                         {
                             return Err(MPFitError::Bounds);
                         }
                         self.nfree += 1;
                         self.ifree.push(i);
-                        self.bounds.push(ParamBound {
-                            lower: p.limit_lower,
-                            upper: p.limit_upper,
-                        });
-                        if p.limit_lower.is_some() || p.limit_upper.is_some() {
+                        self.bounds.push(p.bounds);
+                        if p.bounds.lower.is_some() || p.bounds.upper.is_some() {
                             self.qanylim = true;
                         }
                     }
@@ -560,8 +448,8 @@ where
             Some(params) => {
                 let mut n_pegged = 0;
                 for (i, p) in params.iter().enumerate() {
-                    if p.limit_lower.is_some_and(|x| x == self.xall[i])
-                        || p.limit_upper.is_some_and(|x| x == self.xall[i])
+                    if p.bounds.lower.is_some_and(|x| x == self.xall[i])
+                        || p.bounds.upper.is_some_and(|x| x == self.xall[i])
                     {
                         n_pegged += 1;
                     }

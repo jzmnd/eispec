@@ -7,7 +7,7 @@ use eispec::components::Component;
 use eispec::data::ImpedanceDataError;
 use eispec::data::{ImpedanceData, ImpedanceDataAccessors};
 use eispec::fit::config::MPFitConfig;
-use eispec::fit::{ImpedanceModel, ModelParameter};
+use eispec::fit::{ImpedanceModel, ModelParameter, ParameterBounds};
 use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
@@ -63,14 +63,14 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 fn main() {
     let mut data = ImpedanceDataWrap::from_csv("examples/battery_example_data.csv").unwrap();
     data.set_parameters(vec![
-        ModelParameter::new(10.0, true, Some(0.0), None),
-        ModelParameter::new(100.0, true, Some(0.0), None),
-        ModelParameter::new(1e7, true, Some(0.0), None),
-        ModelParameter::new(0.8, true, Some(0.0), Some(1.0)),
-        ModelParameter::new(100.0, true, Some(0.0), None),
-        ModelParameter::new(100.0, true, Some(0.0), None),
-        ModelParameter::new(1e5, true, Some(0.0), None),
-        ModelParameter::new(0.8, true, Some(0.0), Some(1.0)),
+        ModelParameter::new(10.0, true, ParameterBounds::positive()),
+        ModelParameter::new(100.0, true, ParameterBounds::positive()),
+        ModelParameter::new(1e7, true, ParameterBounds::positive()),
+        ModelParameter::new(0.8, true, ParameterBounds::zero_to_one()),
+        ModelParameter::new(100.0, true, ParameterBounds::positive()),
+        ModelParameter::new(100.0, true, ParameterBounds::positive()),
+        ModelParameter::new(1e5, true, ParameterBounds::positive()),
+        ModelParameter::new(0.8, true, ParameterBounds::zero_to_one()),
     ]);
 
     let result = data.fit().unwrap();
