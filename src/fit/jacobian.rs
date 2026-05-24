@@ -13,7 +13,10 @@ pub struct JacMatrix<T> {
     rows: usize,
 }
 
-impl<T: FloatConst> JacMatrix<T> {
+impl<T> JacMatrix<T>
+where
+    T: FloatConst
+{
     pub fn empty() -> Self {
         Self {
             data: vec![],

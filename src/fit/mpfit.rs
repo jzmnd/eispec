@@ -68,8 +68,8 @@ where
     U: ImpedanceModel<T>,
 {
     ///
-    /// Build a fully-initialised `MPFit` ready to drive iterations:
-    /// validates the config, parses per-parameter bounds/fixed-vs-free
+    /// Build a fully-initialised `MPFit` ready to drive iterations.
+    /// Validates the config, parses per-parameter bounds/fixed-vs-free
     /// status, and performs the initial model evaluation.
     ///
     pub fn try_new(
@@ -89,6 +89,9 @@ where
         Ok(fit)
     }
 
+    ///
+    /// Build a new `MPFit` object.
+    ///
     fn new(
         m: usize,
         npar: usize,
@@ -127,6 +130,9 @@ where
         }
     }
 
+    ///
+    /// Check the provided `MPFitConfig` for valid conffigurations.
+    ///
     fn check_config(&self) -> Result<(), MPFitError> {
         if self.cfg.ftol <= T::zero()
             || self.cfg.xtol <= T::zero()
@@ -191,6 +197,7 @@ where
 
     ///
     /// Initialize Levenberg-Marquardt parameters and iteration counter.
+    /// Starts by evaluating the model with the given starting parameters.
     ///
     fn init_lm(&mut self) -> Result<(), MPFitError> {
         self.model.evaluate(self.xall, &mut self.fvec)?;
@@ -298,17 +305,21 @@ where
         // recomputing during pivoting.
         let mut norms = vec![T::zero(); self.nfree];
         // Compute the initial column norms and initialize several arrays.
-        for (j, ij) in (0..self.nfree).zip((0..self.m * self.nfree).step_by(self.m)) {
-            acnorm[j] = self.fjac[ij..ij + self.m].enorm();
-            rdiag[j] = acnorm[j];
-            norms[j] = rdiag[j];
+        for (j, col) in self.fjac[0..self.m * self.nfree]
+            .chunks_exact(self.m)
+            .enumerate()
+        {
+            let norm = col.enorm();
+            acnorm[j] = norm;
+            rdiag[j] = norm;
+            norms[j] = norm;
             self.ipvt[j] = j;
         }
         // Reduce a to r with householder transformations.
         for j in 0..self.m.min(self.nfree) {
             // Bring the column of largest norm into the pivot position.
             let mut kmax = j;
-            for k in j..self.nfree {
+            for k in j + 1..self.nfree {
                 if rdiag[k] > rdiag[kmax] {
                     kmax = k;
                 }
@@ -319,7 +330,7 @@ where
                 norms[kmax] = norms[j];
                 self.ipvt.swap(j, kmax);
             }
-            let jj = j + self.m * j;
+            let jj = j * (self.m + 1);
             let jjj = self.m - j + jj;
             let mut ajnorm = self.fjac[jj..jjj].enorm();
             if ajnorm == T::zero() {
@@ -335,25 +346,16 @@ where
             self.fjac[jj] += T::one();
             // Apply the transformation to the remaining columns
             // and update the norms.
-            let jp1 = j + 1;
-            if jp1 < self.nfree {
-                for k in jp1..self.nfree {
+            if j + 1 < self.nfree {
+                for k in j + 1..self.nfree {
                     let mut sum = T::zero();
-                    let mut ij = j + self.m * k;
-                    let mut jj = j + self.m * j;
-                    for _ in j..self.m {
-                        sum += self.fjac[jj] * self.fjac[ij];
-                        ij += 1;
-                        jj += 1;
+                    for i in j..self.m {
+                        sum += self.fjac[self.m * j + i] * self.fjac[self.m * k + i];
                     }
                     let temp = sum / self.fjac[(j, j)];
-                    ij = j + self.m * k;
-                    jj = j + self.m * j;
-                    for _ in j..self.m {
-                        let dfjac = temp * self.fjac[jj];
-                        self.fjac[ij] -= dfjac;
-                        ij += 1;
-                        jj += 1;
+                    for i in j..self.m {
+                        let temp2 = self.fjac[self.m * j + i];
+                        self.fjac[self.m * k + i] -= temp * temp2;
                     }
                     if rdiag[k] != T::zero() {
                         let temp = self.fjac[(j, k)] / rdiag[k];
@@ -361,7 +363,7 @@ where
                         rdiag[k] *= temp.sqrt();
                         let temp = rdiag[k] / norms[k];
                         if temp.powi(2) * T::P05 < T::EPSILON {
-                            let start = jp1 + self.m * k;
+                            let start = j + 1 + self.m * k;
                             rdiag[k] = self.fjac[start..start + self.m - j - 1].enorm();
                             norms[k] = rdiag[k];
                         }
@@ -400,6 +402,9 @@ where
         }
     }
 
+    ///
+    /// Fill xnew with x values for all free parameters.
+    ///
     pub fn fill_xnew(&mut self) {
         for i in 0..self.nfree {
             self.xnew[self.ifree[i]] = self.x[i];
@@ -413,7 +418,7 @@ where
         let mut qtfvec = self.fvec.clone();
         let mut jj = 0;
         for j in 0..self.nfree {
-            let temp = self.fjac[jj];
+            let mut temp = self.fjac[jj];
             if temp != T::zero() {
                 let mut sum = T::zero();
                 let mut ij = jj;
@@ -421,7 +426,7 @@ where
                     sum += self.fjac[ij] * qtfvec[i];
                     ij += 1;
                 }
-                let temp = -sum / temp;
+                temp = -sum / temp;
                 ij = jj;
                 for i in j..self.m {
                     qtfvec[i] += self.fjac[ij] * temp;
@@ -453,10 +458,8 @@ where
                 let l = self.ipvt[j];
                 if acnorm[l] != T::zero() {
                     let mut sum = T::zero();
-                    let mut ij = jj;
-                    for i in 0..=j {
+                    for (ij, i) in (jj..).zip(0..=j) {
                         sum += self.fjac[ij] * (self.qtf[i] / self.fnorm);
-                        ij += 1;
                     }
                     gnorm = gnorm.max((sum / acnorm[l]).abs());
                 }
@@ -743,18 +746,11 @@ where
                 work[j] = T::zero();
             }
         }
-        if nsing >= 1 {
-            for k in 0..nsing {
-                let j = nsing - k - 1;
-                let mut ij = self.m * j;
-                work[j] /= self.fjac[(j, j)];
-                let temp = work[j];
-                if j > 0 {
-                    for i in 0..j {
-                        work[i] -= self.fjac[ij] * temp;
-                        ij += 1;
-                    }
-                }
+        for j in (0..nsing).rev() {
+            work[j] /= self.fjac[(j, j)];
+            let temp = work[j];
+            for i in 0..j {
+                work[i] -= self.fjac[self.m * j + i] * temp;
             }
         }
         for j in 0..self.nfree {
@@ -831,10 +827,9 @@ where
         for j in 0..self.nfree {
             work[j] /= sdiag[j];
             let temp = work[j];
-            let jp1 = j + 1;
-            if jp1 < self.nfree {
-                let mut ij = jp1 + jj;
-                for i in jp1..self.nfree {
+            if j + 1 < self.nfree {
+                let mut ij = j + 1 + jj;
+                for i in j + 1..self.nfree {
                     work[i] -= self.fjac[ij] * temp;
                     ij += 1;
                 }
@@ -897,12 +892,9 @@ where
         // in particular, save the diagonal elements of r in r_diag.
         let mut kk = 0;
         for j in 0..self.nfree {
-            let mut ij = kk;
-            let mut ik = kk;
-            for _ in j..self.nfree {
-                self.fjac[ij] = self.fjac[ik];
-                ij += 1;
-                ik += self.m;
+            // Mirror row j of r into column j
+            for i in j..self.nfree {
+                self.fjac[self.m * j + i] = self.fjac[j + self.m * i];
             }
             r_diag[j] = self.fjac[kk];
             qtb[j] = self.qtf[j];
@@ -947,15 +939,12 @@ where
                     qtbpj = -sinx * qtb[k] + cosx * qtbpj;
                     qtb[k] = temp;
                     // Accumulate the transformation in the row of s.
-                    let kp1 = k + 1;
-                    if self.nfree > kp1 {
-                        let mut ik = kk + 1;
-                        for i in kp1..self.nfree {
-                            let temp = cosx * self.fjac[ik] + sinx * sdiag[i];
-                            sdiag[i] = -sinx * self.fjac[ik] + cosx * sdiag[i];
-                            self.fjac[ik] = temp;
-                            ik += 1;
-                        }
+                    for i in k + 1..self.nfree {
+                        let j = self.m * k + i;
+                        let f = self.fjac[j];
+                        let s = sdiag[i];
+                        self.fjac[j] = cosx * f + sinx * s;
+                        sdiag[i] = cosx * s - sinx * f;
                     }
                 }
             }
@@ -976,20 +965,12 @@ where
                 qtb[j] = T::zero();
             }
         }
-        if nsing > 0 {
-            for k in 0..nsing {
-                let j = nsing - k - 1;
-                let mut sum = T::zero();
-                let jp1 = j + 1;
-                if nsing > jp1 {
-                    let mut ij = jp1 + self.m * j;
-                    for i in jp1..nsing {
-                        sum += self.fjac[ij] * qtb[i];
-                        ij += 1;
-                    }
-                }
-                qtb[j] = (qtb[j] - sum) / sdiag[j];
+        for j in (0..nsing).rev() {
+            let mut sum = T::zero();
+            for i in j + 1..nsing {
+                sum += self.fjac[self.m * j + i] * qtb[i];
             }
+            qtb[j] = (qtb[j] - sum) / sdiag[j];
         }
         // Permute the components of z back to components of x.
         for j in 0..self.nfree {
@@ -1233,22 +1214,34 @@ where
         }
     }
 
+    ///
+    /// Check for convergence in orthogonality.
+    ///
     pub fn check_convergence_ortho(&mut self, acnorm: &[T]) {
         if self.gnorm(acnorm) <= self.cfg.gtol {
             self.info = MPFitInfo::ConvergenceDir;
         }
     }
 
+    ///
+    /// Check if `max_iter == 0` and set `self.info` if so.
+    ///
     pub fn check_no_iter(&mut self) {
         if self.cfg.max_iter == 0 {
             self.info = MPFitInfo::MaxIterReached;
         }
     }
 
+    ///
+    /// True if `self.info` is any status other than not done.
+    ///
     pub fn is_done(&self) -> bool {
         self.info != MPFitInfo::NotDone
     }
 
+    ///
+    /// Number of free parameters.
+    ///
     pub fn nfree(&self) -> usize {
         self.nfree
     }
