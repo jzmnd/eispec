@@ -30,7 +30,7 @@ fn main() {
     data.set_parameters(vec![
         ModelParameter::new(1.2e6, true, ParameterBounds::positive()),
         ModelParameter::new(9.1e5, true, ParameterBounds::positive()),
-        ModelParameter::new(0.2, true, ParameterBounds::new(Some(0.0), Some(5.0))),
+        ModelParameter::new(0.2, true, ParameterBounds::between(0.0, 5.0)),
         ModelParameter::new(0.384, true, ParameterBounds::zero_to_one()),
         ModelParameter::new(1.3e-12, true, ParameterBounds::positive()),
     ]);

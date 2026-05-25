@@ -22,10 +22,6 @@ impl<T> ParameterBounds<T>
 where
     T: FloatConst,
 {
-    pub fn new(lower: Option<T>, upper: Option<T>) -> Self {
-        Self { lower, upper }
-    }
-
     pub fn positive() -> Self {
         Self {
             lower: Some(T::zero()),
@@ -44,6 +40,27 @@ where
         Self {
             lower: Some(T::zero()),
             upper: Some(T::one()),
+        }
+    }
+
+    pub fn maximum(m: T) -> Self {
+        Self {
+            lower: None,
+            upper: Some(m),
+        }
+    }
+
+    pub fn minimum(m: T) -> Self {
+        Self {
+            lower: Some(m),
+            upper: None,
+        }
+    }
+
+    pub fn between(lower: T, upper: T) -> Self {
+        Self {
+            lower: Some(lower),
+            upper: Some(upper),
         }
     }
 }

@@ -36,7 +36,7 @@ fn main() {
         ModelParameter::new(10.0, true, ParameterBounds::positive()),
         ModelParameter::new(1.0e5, true, ParameterBounds::positive()),
         ModelParameter::new(0.1, true, ParameterBounds::zero_to_one()),
-        ModelParameter::new(20.0, false, ParameterBounds::new(Some(10.0), None)),
+        ModelParameter::new(20.0, false, ParameterBounds::minimum(10.0)),
     ]);
 
     let result = data.fit().unwrap();
