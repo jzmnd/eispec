@@ -20,22 +20,23 @@ pub struct MPFit<'a, T, U> {
     npar: usize,
     /// Number of free parameters
     nfree: usize,
+    /// Indices into `xall` of the free (non-fixed) parameters; length `nfree`.
     ifree: Vec<usize>,
     /// Array of length m which contains the functions evaluated at the output x
     fvec: Vec<T>,
     /// Variable set to the number of calls to the model function
     nfev: usize,
+    /// Length-`npar` scratch buffer holding the full parameter vector while
+    /// the Jacobian and trial steps are being computed.
     xnew: Vec<T>,
     /// Array of free parameter values
     x: Vec<T>,
     /// Array of n parameter values
-    xall: &'a mut [T],
+    xall: Vec<T>,
     /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
     qtf: Vec<T>,
     /// m x nfree column-major matrix holding the Jacobian (and its in-place QR factorisation).
     fjac: JacMatrix<T>,
-    step: Vec<T>,
-    dstep: Vec<T>,
     /// Per-free-parameter lower/upper bounds (`None` means unbounded on that side).
     bounds: Vec<ParameterBounds<T>>,
     /// Cached: true if any free parameter has at least one limit.
@@ -47,14 +48,21 @@ pub struct MPFit<'a, T, U> {
     ipvt: Vec<usize>,
     /// Array of length n
     diag: Vec<T>,
+    /// Euclidean norm of the residual vector `fvec` at the current accepted point.
     fnorm: T,
+    /// Euclidean norm of the residual vector at the most recent trial point;
+    /// becomes `fnorm` once a step is accepted.
     fnorm1: T,
+    /// Euclidean norm of the scaled parameter vector `diag * x`.
     xnorm: T,
     /// Variable which specifies an upper bound on the Euclidean norm of d*x
     delta: T,
     /// Fit info
     info: MPFitInfo,
+    /// Squared residual norm at the starting parameters, reported back via
+    /// `MPFitStatus::orig_norm`.
     orig_norm: T,
+    /// Current Levenberg-Marquardt damping parameter (the `λ` in `(JᵀJ + λD²)`).
     par: T,
     /// Number of iterations of the algorithm
     iter: usize,
@@ -74,7 +82,7 @@ where
     ///
     pub fn try_new(
         model: &'a mut U,
-        xall: &'a mut [T],
+        xall: Vec<T>,
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
         let m = model.get_freqs().len();
@@ -92,13 +100,7 @@ where
     ///
     /// Build a new `MPFit` object.
     ///
-    fn new(
-        m: usize,
-        npar: usize,
-        model: &'a mut U,
-        xall: &'a mut [T],
-        cfg: &'a MPFitConfig<T>,
-    ) -> Self {
+    fn new(m: usize, npar: usize, model: &'a mut U, xall: Vec<T>, cfg: &'a MPFitConfig<T>) -> Self {
         Self {
             m,
             npar,
@@ -111,8 +113,6 @@ where
             xall,
             qtf: vec![],
             fjac: JacMatrix::empty(),
-            step: vec![],
-            dstep: vec![],
             bounds: vec![],
             qanylim: false,
             model,
@@ -181,8 +181,6 @@ where
                             self.qanylim = true;
                         }
                     }
-                    self.step.push(T::zero());
-                    self.dstep.push(T::zero());
                 }
                 if self.nfree == 0 {
                     return Err(MPFitError::NoFree);
@@ -200,11 +198,11 @@ where
     /// Starts by evaluating the model with the given starting parameters.
     ///
     fn init_lm(&mut self) -> Result<(), MPFitError> {
-        self.model.evaluate(self.xall, &mut self.fvec)?;
+        self.model.evaluate(&self.xall, &mut self.fvec)?;
         self.nfev += 1;
         self.fnorm = self.fvec.enorm();
         self.orig_norm = self.fnorm * self.fnorm;
-        self.xnew.copy_from_slice(self.xall);
+        self.xnew.copy_from_slice(&self.xall);
         self.x = self.ifree.iter().map(|&i| self.xall[i]).collect();
         self.qtf = vec![T::zero(); self.nfree];
         self.fjac = JacMatrix::zeros(self.m, self.nfree);
@@ -254,12 +252,6 @@ where
             let free_p = self.ifree[j];
             let temp = self.xnew[free_p];
             let mut h = eps * temp.abs();
-            if free_p < self.step.len() && self.step[free_p] > T::zero() {
-                h = self.step[free_p];
-            }
-            if free_p < self.dstep.len() && self.dstep[free_p] > T::zero() {
-                h = (self.dstep[free_p] * temp).abs();
-            }
             if h == T::zero() {
                 h = eps;
             }
@@ -521,7 +513,7 @@ where
             residuals: self.fvec,
             xerror,
             covar,
-            x: self.xall.to_vec(),
+            x: self.xall,
         })
     }
 

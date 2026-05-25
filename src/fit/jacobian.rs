@@ -15,7 +15,7 @@ pub struct JacMatrix<T> {
 
 impl<T> JacMatrix<T>
 where
-    T: FloatConst
+    T: FloatConst,
 {
     pub fn empty() -> Self {
         Self {

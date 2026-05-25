@@ -66,7 +66,7 @@ where
     /// Perform the complex non-linear fitting procedure.
     ///
     fn fit(&mut self) -> Result<MPFitStatus<T>, MPFitError> {
-        let mut init: Vec<T> = self
+        let init: Vec<T> = self
             .get_parameters()
             .unwrap()
             .iter()
@@ -74,7 +74,7 @@ where
             .collect();
 
         let config = self.config();
-        let mut fit = MPFit::try_new(self, &mut init, &config)?;
+        let mut fit = MPFit::try_new(self, init, &config)?;
 
         let nfree = fit.nfree();
         let mut rdiag = vec![T::zero(); nfree];
