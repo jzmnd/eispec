@@ -17,57 +17,65 @@ pub struct MPFit<'a, T, U> {
     /// Number of residuals (2 * number of frequency points: real and
     /// imaginary parts of the weighted impedance deviation are stacked).
     m: usize,
-    /// Number of parameters
+    /// Number of parameters.
     npar: usize,
-    /// Number of free parameters
+    /// Number of free parameters.
     nfree: usize,
     /// Indices into `xall` of the free (non-fixed) parameters; length `nfree`.
     ifree: Vec<usize>,
-    /// Array of length m which contains the functions evaluated at the output x
+    /// Array of length `m` which contains the functions evaluated at the output `x`.
     fvec: Vec<T>,
-    /// Variable set to the number of calls to the model function
+    /// Variable set to the number of calls to the model function.
     nfev: usize,
-    /// Length-`npar` scratch buffer holding the full parameter vector while
+    /// Full parameter vector, length `npar`. Scratch buffer used while
     /// the Jacobian and trial steps are being computed.
     xnew: Vec<T>,
-    /// Array of free parameter values
+    /// Vector of free parameter values, length `nfree`. This is what
+    /// the LM step actually operates on — the trust region, Jacobian columns,
+    /// and damping all live in this `nfree`-dimensional space. Maps back to
+    /// the user-facing layout via `xall[ifree[j]] = x[j]`.
     x: Vec<T>,
-    /// Array of n parameter values
+    /// Full parameter vector, length `npar`. Holds both fixed and free
+    /// parameters and is what gets handed to `model.evaluate`.
+    /// During a step, the in-progress full vector lives in
+    /// `xnew` while `xall` only reflects accepted values.
     xall: Vec<T>,
-    /// Array of length n which contains the first n elements of the vector (q transpose)*fvec
+    /// Array of length n which contains the first n elements of the
+    /// vector `(q transpose) * fvec`.
     qtf: Vec<T>,
-    /// m x nfree column-major matrix holding the Jacobian (and its in-place QR factorisation).
+    /// `m * nfree` column-major matrix holding the Jacobian (and its
+    /// in-place QR factorization).
     fjac: JacMatrix<T>,
     /// Per-free-parameter lower/upper bounds (`None` means unbounded on that side).
     bounds: Vec<ParameterBounds<T>>,
     /// Cached: true if any free parameter has at least one limit.
-    qanylim: bool,
-    /// Model function to be evaluated
+    any_limit: bool,
+    /// Model function to be evaluated.
     model: &'a mut U,
-    /// Array of length n which defines the permutation matrix p such that a*p = q*r.
-    /// Column j of p is column ipvt(j) of the identity matrix.
+    /// Array of length n which defines the permutation matrix p such that `a * p = q * r`.
+    /// Column j of p is column `ipvt(j)` of the identity matrix.
     ipvt: Vec<usize>,
-    /// Array of length n
+    /// Per-parameter scale factors that form the diagonal matrix `D` in
+    /// the LM damping term `(JᵀJ + λD²)`, length `npar`.
     diag: Vec<T>,
     /// Euclidean norm of the residual vector `fvec` at the current accepted point.
     fnorm: T,
-    /// Euclidean norm of the residual vector at the most recent trial point;
-    /// becomes `fnorm` once a step is accepted.
+    /// Euclidean norm of the residual vector `fvec` at the most recent trial point.
+    /// Becomes `fnorm` once a step is accepted.
     fnorm1: T,
     /// Euclidean norm of the scaled parameter vector `diag * x`.
     xnorm: T,
-    /// Variable which specifies an upper bound on the Euclidean norm of d*x
+    /// Variable which specifies an upper bound on the Euclidean norm of `d * x`.
     delta: T,
-    /// Fit info
+    /// Fit info.
     info: MPFitInfo,
-    /// Squared residual norm at the starting parameters, reported back via
-    /// `MPFitStatus::orig_norm`.
+    /// Squared residual norm at the starting parameters.
     orig_norm: T,
-    /// Current Levenberg-Marquardt damping parameter (the `λ` in `(JᵀJ + λD²)`).
-    par: T,
-    /// Number of iterations of the algorithm
+    /// Current Levenberg-Marquardt damping parameter (`(JᵀJ + λD²)`).
+    lambda: T,
+    /// Number of iterations of the algorithm.
     iter: usize,
-    /// Fit configurations
+    /// Fit configurations.
     cfg: &'a MPFitConfig<T>,
 }
 
@@ -77,7 +85,7 @@ where
     U: ImpedanceModel<T>,
 {
     ///
-    /// Build a fully-initialised `MPFit` ready to drive iterations.
+    /// Build a fully-initialized `MPFit` ready to drive iterations.
     /// Validates the config, parses per-parameter bounds/fixed-vs-free
     /// status, and performs the initial model evaluation.
     ///
@@ -116,7 +124,7 @@ where
             qtf: vec![],
             fjac: JacMatrix::empty(),
             bounds: vec![],
-            qanylim: false,
+            any_limit: false,
             model,
             ipvt: vec![0; npar],
             diag: vec![T::zero(); npar],
@@ -126,14 +134,14 @@ where
             delta: T::zero(),
             info: MPFitInfo::NotDone,
             orig_norm: T::zero(),
-            par: T::zero(),
+            lambda: T::zero(),
             iter: 1,
             cfg,
         }
     }
 
     ///
-    /// Check the provided `MPFitConfig` for valid conffigurations.
+    /// Check the provided `MPFitConfig` for valid configurations.
     ///
     fn check_config(&self) -> Result<(), MPFitError> {
         if self.cfg.ftol <= T::zero()
@@ -180,7 +188,7 @@ where
                         self.ifree.push(i);
                         self.bounds.push(p.bounds);
                         if p.bounds.lower.is_some() || p.bounds.upper.is_some() {
-                            self.qanylim = true;
+                            self.any_limit = true;
                         }
                     }
                 }
@@ -216,7 +224,7 @@ where
     /// Check if parameters are pegged at their upper/lower limits.
     ///
     pub fn check_limits(&mut self) {
-        if self.qanylim {
+        if self.any_limit {
             for j in 0..self.nfree {
                 let bound = self.bounds[j];
                 let lpegged = bound.lower.is_some_and(|l| self.x[j] == l);
@@ -674,27 +682,28 @@ where
         let mut dxnorm = scaled_step.enorm();
         let mut fp = dxnorm - self.delta;
         if fp <= self.delta * T::P1 {
-            self.par = T::zero();
+            self.lambda = T::zero();
             return;
         }
 
-        let mut parl = self.compute_parl(nsing, dxnorm, &scaled_step, fp, &mut work);
-        let (gnorm, mut paru) = self.compute_paru(&mut work);
+        let mut lambda_lower =
+            self.compute_lambda_lower(nsing, dxnorm, &scaled_step, fp, &mut work);
+        let (gnorm, mut lambda_upper) = self.compute_lambda_upper(&mut work);
 
         // Clamp the input par into the bracket. Note: the original CMPFIT
-        // port uses `.max(paru)` on both sides — preserved here to keep
+        // port uses `.max(lambda_upper)` on both sides — preserved here to keep
         // bit-identical behavior with the reference implementation.
-        self.par = self.par.max(parl);
-        self.par = self.par.max(paru);
-        if self.par == T::zero() {
-            self.par = gnorm / dxnorm;
+        self.lambda = self.lambda.max(lambda_lower);
+        self.lambda = self.lambda.max(lambda_upper);
+        if self.lambda == T::zero() {
+            self.lambda = gnorm / dxnorm;
         }
 
         for iter in 1..=10 {
-            if self.par == T::zero() {
-                self.par = T::MIN_POSITIVE.max(paru * T::P0001);
+            if self.lambda == T::zero() {
+                self.lambda = T::MIN_POSITIVE.max(lambda_upper * T::P0001);
             }
-            let temp = self.par.sqrt();
+            let temp = self.lambda.sqrt();
             for j in 0..self.nfree {
                 work[j] = temp * self.diag[self.ifree[j]];
             }
@@ -706,19 +715,19 @@ where
             let prev_fp = fp;
             fp = dxnorm - self.delta;
             if fp.abs() <= self.delta * T::P1
-                || (parl == T::zero() && fp <= prev_fp && prev_fp < T::zero())
+                || (lambda_lower == T::zero() && fp <= prev_fp && prev_fp < T::zero())
                 || iter >= 10
             {
                 return;
             }
             let parc = self.par_correction(dxnorm, fp, &scaled_step, &sdiag, &mut work);
             if fp > T::zero() {
-                parl = parl.max(self.par);
+                lambda_lower = lambda_lower.max(self.lambda);
             }
             if fp < T::zero() {
-                paru = paru.min(self.par);
+                lambda_upper = lambda_upper.min(self.lambda);
             }
-            self.par = parl.max(self.par + parc);
+            self.lambda = lambda_lower.max(self.lambda + parc);
         }
     }
 
@@ -754,10 +763,17 @@ where
     }
 
     ///
-    /// Compute the lower bracket `parl` on the LM parameter. Returns zero
+    /// Compute the lower bracket `lambda_lower` on the LM parameter. Returns zero
     /// when the Jacobian is rank-deficient (no useful lower bound).
     ///
-    fn compute_parl(&self, nsing: usize, dxnorm: T, scaled_step: &[T], fp: T, work: &mut [T]) -> T {
+    fn compute_lambda_lower(
+        &self,
+        nsing: usize,
+        dxnorm: T,
+        scaled_step: &[T],
+        fp: T,
+        work: &mut [T],
+    ) -> T {
         if nsing < self.nfree {
             return T::zero();
         }
@@ -780,10 +796,10 @@ where
     }
 
     ///
-    /// Compute the upper bracket `paru` on the LM parameter from the
-    /// scaled gradient norm. Returns `(gnorm, paru)`.
+    /// Compute the upper bracket `lambda_upper` on the LM parameter from the
+    /// scaled gradient norm. Returns `(gnorm, lambda_upper)`.
     ///
-    fn compute_paru(&self, work: &mut [T]) -> (T, T) {
+    fn compute_lambda_upper(&self, work: &mut [T]) -> (T, T) {
         let mut jj = 0;
         for j in 0..self.nfree {
             let mut sum = T::zero();
@@ -797,11 +813,11 @@ where
             jj += self.m;
         }
         let gnorm = work.enorm();
-        let mut paru = gnorm / self.delta;
-        if paru == T::zero() {
-            paru = T::MIN_POSITIVE / self.delta.min(T::P1);
+        let mut lambda_upper = gnorm / self.delta;
+        if lambda_upper == T::zero() {
+            lambda_upper = T::MIN_POSITIVE / self.delta.min(T::P1);
         }
-        (gnorm, paru)
+        (gnorm, lambda_upper)
     }
 
     ///
@@ -982,7 +998,7 @@ where
     pub fn iterate(&mut self, gnorm: T, step: &mut [T]) -> Result<bool, MPFitError> {
         let mut trial_x = vec![T::zero(); self.nfree];
         let mut work = vec![T::zero(); self.nfree];
-        let mut trial_resid = vec![T::zero(); self.m];
+        let mut trial_residuals = vec![T::zero(); self.m];
 
         for j in 0..self.nfree {
             step[j] = -step[j];
@@ -1001,7 +1017,7 @@ where
         for i in 0..self.nfree {
             self.xnew[self.ifree[i]] = trial_x[i];
         }
-        self.fnorm1 = self.evaluate_trial(&mut trial_resid)?;
+        self.fnorm1 = self.evaluate_trial(&mut trial_residuals)?;
 
         let (actred, prered, dirder, ratio) =
             self.compute_reductions(step, alpha, pnorm, &mut work);
@@ -1014,7 +1030,7 @@ where
                 self.x[j] = trial_x[j];
                 work[j] = self.diag[self.ifree[j]] * self.x[j];
             }
-            self.fvec.copy_from_slice(&trial_resid);
+            self.fvec.copy_from_slice(&trial_residuals);
             self.xnorm = work.enorm();
             self.fnorm = self.fnorm1;
             self.iter += 1;
@@ -1032,7 +1048,7 @@ where
     ///
     fn apply_bounds(&self, step: &mut [T], trial_x: &mut [T]) -> T {
         let mut alpha = T::one();
-        if !self.qanylim {
+        if !self.any_limit {
             for j in 0..self.nfree {
                 trial_x[j] = self.x[j] + step[j];
             }
@@ -1100,12 +1116,12 @@ where
 
     ///
     /// Evaluate the model at `self.xnew`, store the residual in
-    /// `trial_residuals`, and return its Euclidean norm.
+    /// `trial_residualsuals`, and return its Euclidean norm.
     ///
-    fn evaluate_trial(&mut self, trial_residuals: &mut [T]) -> Result<T, MPFitError> {
-        self.model.evaluate(&self.xnew, trial_residuals)?;
+    fn evaluate_trial(&mut self, trial_residualsuals: &mut [T]) -> Result<T, MPFitError> {
+        self.model.evaluate(&self.xnew, trial_residualsuals)?;
         self.nfev += 1;
-        Ok(trial_residuals.enorm())
+        Ok(trial_residualsuals.enorm())
     }
 
     ///
@@ -1134,7 +1150,7 @@ where
             jj += self.m;
         }
         let temp1 = work.enorm() * alpha / self.fnorm;
-        let temp2 = ((alpha * self.par).sqrt() * pnorm) / self.fnorm;
+        let temp2 = ((alpha * self.lambda).sqrt() * pnorm) / self.fnorm;
         let temp11 = temp1 * temp1;
         let temp22 = temp2 * temp2;
         let prered = temp11 + temp22 / T::HALF;
@@ -1148,7 +1164,7 @@ where
     }
 
     ///
-    /// Update the trust-region radius `delta` and LM damping `par` from
+    /// Update the trust-region radius `delta` and LM damping `lambda` from
     /// the reduction ratio.
     ///
     fn update_trust_region(&mut self, actred: T, dirder: T, ratio: T, pnorm: T) {
@@ -1162,10 +1178,10 @@ where
                 temp = T::P1;
             }
             self.delta = temp * self.delta.min(pnorm / T::P1);
-            self.par /= temp;
-        } else if self.par == T::zero() || ratio >= T::P75 {
+            self.lambda /= temp;
+        } else if self.lambda == T::zero() || ratio >= T::P75 {
             self.delta = pnorm / T::HALF;
-            self.par *= T::HALF;
+            self.lambda *= T::HALF;
         }
     }
 
