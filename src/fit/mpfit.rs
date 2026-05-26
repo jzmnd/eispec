@@ -14,7 +14,8 @@ use crate::fit::enums::{MPFitError, MPFitInfo};
 use crate::fit::ImpedanceModel;
 
 pub struct MPFit<'a, T, U> {
-    /// Number of data points to be fit
+    /// Number of residuals (2 * number of frequency points: real and
+    /// imaginary parts of the weighted impedance deviation are stacked).
     m: usize,
     /// Number of parameters
     npar: usize,
@@ -85,10 +86,11 @@ where
         xall: Vec<T>,
         cfg: &'a MPFitConfig<T>,
     ) -> Result<Self, MPFitError> {
-        let m = model.get_freqs().len();
-        if m == 0 {
+        let n_freqs = model.get_freqs().len();
+        if n_freqs == 0 {
             return Err(MPFitError::Empty);
         }
+        let m = 2 * n_freqs;
         let npar = xall.len();
         let mut fit = Self::new(m, npar, model, xall, cfg);
         fit.check_config()?;

@@ -43,7 +43,7 @@ fn main() {
 
     assert_eq!(result.n_par, 3);
     assert_eq!(result.n_free, 3);
-    assert_eq!(result.n_func, 81);
+    assert_eq!(result.n_func, 162);
 
     assert_approx_eq!(200.0, result.x[0], 0.01);
     assert_approx_eq!(1e-6, result.x[1]);

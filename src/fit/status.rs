@@ -22,7 +22,8 @@ pub struct MPFitStatus<T> {
     pub n_free: usize,
     /// Number of pegged parameters
     pub n_pegged: usize,
-    /// Number of residuals (= num. of data points)
+    /// Number of residuals (2 * number of frequency points; real and
+    /// imaginary parts are fit as separate residuals).
     pub n_func: usize,
     /// Final residuals nfunc-vector
     pub residuals: Vec<T>,

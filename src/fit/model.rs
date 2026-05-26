@@ -38,26 +38,27 @@ where
     ///
     /// Main evaluation procedure which is called from MPFit.
     ///
-    /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
-    /// Residuals for the real and imaginary parts of the impedance
-    /// are calculated separately and combined into a single value for
-    /// the `residuals` slice.
+    /// Writes `2 * n` weighted residuals into the `residuals` slice, where
+    /// `n` is the number of frequency points. The layout is stacked: the
+    /// first `n` entries are real-part residuals `(zmeas.re - z.re) / zerr.re`,
+    /// the next `n` are the imaginary-part residuals. Keeping the parts
+    /// separate (and signed) preserves the gradient direction.
     ///
     fn evaluate(&mut self, params: &[T], residuals: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
+        let n = self.get_freqs().len();
+        let (re_residuals, im_residuals) = residuals.split_at_mut(n);
 
-        for (((r, f), zm), ze) in residuals
+        for ((((r_re, r_im), f), zm), ze) in re_residuals
             .iter_mut()
+            .zip(im_residuals.iter_mut())
             .zip(self.get_freqs().iter())
             .zip(self.get_zmeas().iter())
             .zip(self.get_zerr().iter())
         {
             let z = model.impedance(*f);
-
-            let rre = (zm.re() - z.re()) / ze.re();
-            let rim = (zm.im() - z.im()) / ze.im();
-
-            *r = (rre.powi(2) + rim.powi(2)).sqrt();
+            *r_re = (zm.re() - z.re()) / ze.re();
+            *r_im = (zm.im() - z.im()) / ze.im();
         }
         Ok(())
     }

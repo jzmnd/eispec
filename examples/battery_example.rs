@@ -80,7 +80,7 @@ fn main() {
 
     assert_eq!(result.n_par, 8);
     assert_eq!(result.n_free, 8);
-    assert_eq!(result.n_func, 113);
+    assert_eq!(result.n_func, 226);
 
     assert_approx_eq!(30.0, result.x[0], 0.01);
     assert_approx_eq!(75.0, result.x[1], 0.01);
