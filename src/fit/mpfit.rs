@@ -1098,12 +1098,12 @@ where
 
     ///
     /// Evaluate the model at `self.xnew`, store the residual in
-    /// `trial_resid`, and return its Euclidean norm. Increments `nfev`.
+    /// `trial_residuals`, and return its Euclidean norm.
     ///
-    fn evaluate_trial(&mut self, trial_resid: &mut [T]) -> Result<T, MPFitError> {
-        self.model.evaluate(&self.xnew, trial_resid)?;
+    fn evaluate_trial(&mut self, trial_residuals: &mut [T]) -> Result<T, MPFitError> {
+        self.model.evaluate(&self.xnew, trial_residuals)?;
         self.nfev += 1;
-        Ok(trial_resid.enorm())
+        Ok(trial_residuals.enorm())
     }
 
     ///

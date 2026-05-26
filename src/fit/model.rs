@@ -41,12 +41,12 @@ where
     /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
     /// Residuals for the real and imaginary parts of the impedance
     /// are calculated separately and combined into a single value for
-    /// the `deviates` slice.
+    /// the `residuals` slice.
     ///
-    fn evaluate(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
+    fn evaluate(&mut self, params: &[T], residuals: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
 
-        for (((d, f), zm), ze) in deviates
+        for (((r, f), zm), ze) in residuals
             .iter_mut()
             .zip(self.get_freqs().iter())
             .zip(self.get_zmeas().iter())
@@ -54,10 +54,10 @@ where
         {
             let z = model.impedance(*f);
 
-            let dre = (zm.re() - z.re()) / ze.re();
-            let dim = (zm.im() - z.im()) / ze.im();
+            let rre = (zm.re() - z.re()) / ze.re();
+            let rim = (zm.im() - z.im()) / ze.im();
 
-            *d = (dre.powi(2) + dim.powi(2)).sqrt();
+            *r = (rre.powi(2) + rim.powi(2)).sqrt();
         }
         Ok(())
     }
