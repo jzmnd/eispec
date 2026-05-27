@@ -36,7 +36,7 @@ where
     }
 
     ///
-    /// Main evaluation procedure which is called from MPFit.
+    /// Main evaluation procedure which is called from `MPFit`.
     ///
     /// Writes `2 * n` weighted residuals into the `residuals` slice, where
     /// `n` is the number of frequency points. The layout is stacked: the

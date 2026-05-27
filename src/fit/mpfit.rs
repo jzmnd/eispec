@@ -171,13 +171,7 @@ where
                     return Err(MPFitError::Empty);
                 }
                 for (i, p) in pars.iter().enumerate() {
-                    if !p.fit {
-                        if p.bounds.lower.is_some_and(|x| self.xall[i] < x)
-                            || p.bounds.upper.is_some_and(|x| self.xall[i] > x)
-                        {
-                            return Err(MPFitError::InitBounds);
-                        }
-                    } else {
+                    if p.fit {
                         if p.bounds.lower.is_some()
                             && p.bounds.upper.is_some()
                             && p.bounds.lower >= p.bounds.upper
@@ -190,13 +184,19 @@ where
                         if p.bounds.lower.is_some() || p.bounds.upper.is_some() {
                             self.any_limit = true;
                         }
+                    } else {
+                        if p.bounds.lower.is_some_and(|x| self.xall[i] < x)
+                            || p.bounds.upper.is_some_and(|x| self.xall[i] > x)
+                        {
+                            return Err(MPFitError::InitBounds);
+                        }
                     }
                 }
                 if self.nfree == 0 {
                     return Err(MPFitError::NoFree);
                 }
             }
-        };
+        }
         if self.m < self.nfree {
             return Err(MPFitError::DoF);
         }
@@ -377,7 +377,7 @@ where
     }
 
     ///
-    /// On the first iteration and if user_scale is requested, scale according
+    /// On the first iteration and if `user_scale` is requested, scale according
     /// to the norms of the columns of the initial Jacobian,
     /// calculate the norm of the scaled x, and initialize the step bound delta.
     ///
@@ -894,19 +894,19 @@ where
         // `step` is the output LM step (length nfree), permuted back at end.
         // `sdiag` is the output s-diagonal (length nfree), used by lmpar.
         // `qtb` (length nfree) is local: a working copy of qtf that becomes z.
-        // `r_diag` (length nfree) is local: temporary save of R diagonal which
+        // `rdiag` (length nfree) is local: temporary save of R diagonal which
         // is restored at the end so `fjac` is unchanged on exit.
         let mut qtb = vec![T::zero(); self.nfree];
-        let mut r_diag = vec![T::zero(); self.nfree];
+        let mut rdiag = vec![T::zero(); self.nfree];
         // Copy r and (q transpose)*b to preserve input and initialize s.
-        // in particular, save the diagonal elements of r in r_diag.
+        // in particular, save the diagonal elements of r in rdiag.
         let mut kk = 0;
         for j in 0..self.nfree {
             // Mirror row j of r into column j
             for i in j..self.nfree {
                 self.fjac[self.m * j + i] = self.fjac[j + self.m * i];
             }
-            r_diag[j] = self.fjac[kk];
+            rdiag[j] = self.fjac[kk];
             qtb[j] = self.qtf[j];
             kk += self.m + 1;
         }
@@ -962,7 +962,7 @@ where
             // the corresponding diagonal element of r.
             let kk = j + self.m * j;
             sdiag[j] = self.fjac[kk];
-            self.fjac[kk] = r_diag[j];
+            self.fjac[kk] = rdiag[j];
         }
         // Solve the triangular system for z. if the system is
         // singular, then obtain a least squares solution.
@@ -1189,7 +1189,7 @@ where
     /// Set `self.info` based on convergence and termination conditions.
     /// The stringent-tolerance block only runs when no Convergence* status
     /// has already been set, so it cannot downgrade a converged fit to
-    /// MaxIterReached or *NoImprovement.
+    /// `MaxIterReached` or `*NoImprovement`.
     ///
     fn check_convergence(&mut self, actred: T, prered: T, ratio: T, gnorm: T) {
         if actred.abs() <= self.cfg.ftol && prered <= self.cfg.ftol && ratio * T::HALF <= T::one() {

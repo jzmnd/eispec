@@ -3,6 +3,7 @@ workspace = { members = ["eispec_macros"] }
 [package]
 name = "eispec"
 version = "0.1.0"
+description = "Electrochemical impedance spectroscopy library."
 authors = ["Jez Smith <j.smith.03@cantab.net>"]
 readme = "README.md"
 license-file = "LICENSE.md"

@@ -98,3 +98,12 @@ impl<T> IndexMut<Range<usize>> for JacMatrix<T> {
         &mut self.data[r]
     }
 }
+
+impl<T> IntoIterator for JacMatrix<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.into_iter()
+    }
+}
