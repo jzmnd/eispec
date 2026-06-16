@@ -19,12 +19,12 @@ pub struct MPFitConfig<T> {
     /// Range tolerance for covariance calculation
     pub covtol: T,
     /// Maximum number of iterations
-    /// If max_iter == 0, then basic error checking is done, and
+    /// If `max_iter == 0`, then basic error checking is done, and
     /// parameter errors/covariances are estimated based on input
     /// parameter values, but no fitting iterations are done.
     pub max_iter: usize,
     /// Maximum number of function evaluations
-    /// If max_fev == 0 no limit is applied
+    /// If `max_fev == 0` no limit is applied
     pub max_fev: usize,
     /// Scale variables by user values?
     /// true = yes, user scale values in diag;
