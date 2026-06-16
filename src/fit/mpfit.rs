@@ -636,16 +636,16 @@ where
     /// Given an m by nfree matrix a, an nfree by nfree nonsingular diagonal
     /// matrix d, an m-vector b, and a positive number delta,
     /// the problem is to determine a value for the parameter
-    /// par such that if `step` solves the system
+    /// lambda such that if `step` solves the system
     /// ```text
     ///     a*step = b ,   sqrt(par)*d*step = 0
     /// ```
     /// in the least squares sense, and dxnorm is the Euclidean
-    /// norm of d*step, then either par is zero and
+    /// norm of d*step, then either lambda is zero and
     /// ```text
     ///     (dxnorm-delta) < 0.1*delta
     /// ```
-    /// or par is positive and
+    /// or lambda is positive and
     /// ```text
     ///     abs(dxnorm-delta) < 0.1*delta
     /// ```
@@ -659,13 +659,13 @@ where
     /// and the first nfree components of (q transpose)*b. On output
     /// lmpar also provides an upper triangular matrix s such that
     /// ```text
-    ///     p *(a *a + par*d*d)*p = s *s
+    ///     p *(a *a + lambda*d*d)*p = s *s
     /// ```
     /// s is employed within lmpar and may be of separate interest.
     ///
     /// Only a few iterations are generally needed for convergence
     /// of the algorithm. If, however, the limit of 10 iterations
-    /// is reached, then the output par will contain the best
+    /// is reached, then the output lambda will contain the best
     /// value obtained so far.
     ///
     pub fn lmpar(&mut self, step: &mut [T]) {
@@ -695,9 +695,8 @@ where
             self.compute_lambda_lower(nsing, dxnorm, &scaled_step, fp, &mut bracket_buf);
         let (gnorm, mut lambda_upper) = self.compute_lambda_upper(&mut bracket_buf);
 
-        // Clamp the input par into the bracket. Note: the original CMPFIT
-        // port uses `.max(lambda_upper)` on both sides — preserved here to keep
-        // bit-identical behavior with the reference implementation.
+        // If the input lambda lies outside of the bracket, clamp lambda
+        // to the closer endpoint.
         self.lambda = self.lambda.max(lambda_lower);
         self.lambda = self.lambda.max(lambda_upper);
         if self.lambda == T::zero() {
