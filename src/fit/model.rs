@@ -7,7 +7,7 @@ use crate::components::Component;
 use crate::constants::FloatConst;
 use crate::data::ImpedanceDataAccessors;
 use crate::fit::config::MPFitConfig;
-use crate::fit::enums::{MPFitDone, MPFitError, MPFitInfo};
+use crate::fit::enums::MPFitError;
 use crate::fit::mpfit::MPFit;
 use crate::fit::status::MPFitStatus;
 
@@ -36,28 +36,29 @@ where
     }
 
     ///
-    /// Main evaluation procedure which is called from MPFit.
+    /// Main evaluation procedure which is called from `MPFit`.
     ///
-    /// The residuals are defined as ```(zmeas[i] - model(freq[i])) / zerr[i]```.
-    /// Residuals for the real and imaginary parts of the impedance
-    /// are calculated separately and combined into a single value for
-    /// the `deviates` slice.
+    /// Writes `2 * n` weighted residuals into the `residuals` slice, where
+    /// `n` is the number of frequency points. The layout is stacked: the
+    /// first `n` entries are real-part residuals `(zmeas.re - z.re) / zerr.re`,
+    /// the next `n` are the imaginary-part residuals. Keeping the parts
+    /// separate (and signed) preserves the gradient direction.
     ///
-    fn evaluate(&mut self, params: &[T], deviates: &mut [T]) -> Result<(), MPFitError> {
+    fn evaluate(&mut self, params: &[T], residuals: &mut [T]) -> Result<(), MPFitError> {
         let model = self.model(params);
+        let n = self.get_freqs().len();
+        let (re_residuals, im_residuals) = residuals.split_at_mut(n);
 
-        for (((d, f), zm), ze) in deviates
+        for ((((r_re, r_im), f), zm), ze) in re_residuals
             .iter_mut()
+            .zip(im_residuals.iter_mut())
             .zip(self.get_freqs().iter())
             .zip(self.get_zmeas().iter())
             .zip(self.get_zerr().iter())
         {
             let z = model.impedance(*f);
-
-            let dre = (zm.re() - z.re()) / ze.re();
-            let dim = (zm.im() - z.im()) / ze.im();
-
-            *d = (dre.powi(2) + dim.powi(2)).sqrt();
+            *r_re = (zm.re() - z.re()) / ze.re();
+            *r_im = (zm.im() - z.im()) / ze.im();
         }
         Ok(())
     }
@@ -66,7 +67,7 @@ where
     /// Perform the complex non-linear fitting procedure.
     ///
     fn fit(&mut self) -> Result<MPFitStatus<T>, MPFitError> {
-        let mut init: Vec<T> = self
+        let init: Vec<T> = self
             .get_parameters()
             .unwrap()
             .iter()
@@ -74,40 +75,38 @@ where
             .collect();
 
         let config = self.config();
-        let mut fit = MPFit::new(self, &mut init, &config)?;
+        let mut fit = MPFit::try_new(self, init, &config)?;
 
-        fit.check_config()?;
-        fit.parse_parameters()?;
-        fit.init_lm()?;
+        let nfree = fit.nfree();
+        let mut rdiag = vec![T::zero(); nfree];
+        let mut acnorm = vec![T::zero(); nfree];
+        let mut step = vec![T::zero(); nfree];
 
         loop {
             fit.fill_xnew();
             fit.fdjac2()?;
             fit.check_limits();
-            fit.qrfac();
-            fit.scale();
-            fit.transpose();
+            fit.qrfac(&mut rdiag, &mut acnorm);
+            fit.scale(&acnorm);
+            fit.transpose(&rdiag);
             if !fit.check_is_finite() {
                 return Err(MPFitError::Nan);
             }
-            let gnorm = fit.gnorm();
-            if gnorm <= config.gtol {
-                fit.info = MPFitInfo::ConvergenceDir;
-            }
-            if fit.info != MPFitInfo::NotDone {
+            fit.check_convergence_ortho(&acnorm);
+            fit.check_no_iter();
+            if fit.is_done() {
                 return fit.terminate();
             }
-            if config.max_iter == 0 {
-                fit.info = MPFitInfo::MaxIterReached;
-                return fit.terminate();
-            }
-            fit.rescale();
+            let gnorm = fit.gnorm(&acnorm);
+            fit.rescale(&acnorm);
             loop {
-                fit.lmpar();
-                match fit.iterate(gnorm)? {
-                    MPFitDone::Exit => return fit.terminate(),
-                    MPFitDone::Inner => continue,
-                    MPFitDone::Outer => break,
+                fit.lmpar(&mut step);
+                let accepted = fit.iterate(gnorm, &mut step)?;
+                if fit.is_done() {
+                    return fit.terminate();
+                }
+                if accepted {
+                    break;
                 }
             }
         }
