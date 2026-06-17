@@ -1,5 +1,5 @@
 //!
-//! Core circuit components to combine other components in series or parallel
+//! Core circuit components to combine other components in series or parallel.
 //!
 use crate::components::Component;
 use crate::constants::FloatConst;

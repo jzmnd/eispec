@@ -1,3 +1,6 @@
+//!
+//! Complex impedance fitting using the Levenberg-Marquardt algorithm.
+//!
 pub mod config;
 pub mod enorm;
 pub mod enums;

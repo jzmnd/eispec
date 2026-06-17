@@ -1,3 +1,6 @@
+//!
+//! Newtypes for current, frequency, impedance, power and voltage.
+//!
 mod current;
 mod frequency;
 mod impedance;

@@ -1,3 +1,6 @@
+//!
+//! All circuit components.
+//!
 mod core;
 pub mod cpe;
 pub mod dielectric;
