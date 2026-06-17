@@ -669,16 +669,10 @@ where
     /// value obtained so far.
     ///
     pub fn lmpar(&mut self, step: &mut [T]) {
-        // Single `nfree`-vector allocation that morphs through three roles:
-        // first as `gn_solution` (the un-permuted Gauss-Newton solution),
-        // then as `bracket_buf` for the lambda-bracket computations, finally
-        // as `damping_diag` (sqrt(lambda) * D) inside the iteration loop —
-        // also borrowed by `lambda_correction` as scratch on each iteration.
-        let mut gn_solution = vec![T::zero(); self.nfree];
         let mut scaled_step = vec![T::zero(); self.nfree];
         let mut sdiag = vec![T::zero(); self.nfree];
 
-        let nsing = self.gauss_newton_step(step, &mut gn_solution);
+        let nsing = self.gauss_newton_step(step);
 
         for j in 0..self.nfree {
             scaled_step[j] = self.diag[self.ifree[j]] * step[j];
@@ -690,7 +684,7 @@ where
             return;
         }
 
-        let mut bracket_buf = gn_solution;
+        let mut bracket_buf = vec![T::zero(); self.nfree];
         let mut lambda_lower =
             self.compute_lambda_lower(nsing, dxnorm, &scaled_step, fp, &mut bracket_buf);
         let (gnorm, mut lambda_upper) = self.compute_lambda_upper(&mut bracket_buf);
@@ -703,7 +697,7 @@ where
             self.lambda = gnorm / dxnorm;
         }
 
-        let mut damping_diag = bracket_buf;
+        let mut damping_diag = vec![T::zero(); self.nfree];
         for iter in 1..=10 {
             if self.lambda == T::zero() {
                 self.lambda = T::MIN_POSITIVE.max(lambda_upper * T::P0001);
@@ -740,31 +734,33 @@ where
     ///
     /// Compute the (least-squares) Gauss-Newton direction by
     /// back-substitution of the QR factorization. Stores the permuted
-    /// result in `step`; uses `solution` as length-`nfree` scratch where
-    /// the un-permuted solution `z` is built up before being scattered
+    /// result in `step`; uses `s` as length-`nfree` scratch where
+    /// the un-permuted solution is built up before being scattered
     /// into `step`. Returns the smallest column index whose R diagonal
     /// is zero, or `nfree` if R is non-singular.
     ///
-    fn gauss_newton_step(&self, step: &mut [T], solution: &mut [T]) -> usize {
+    fn gauss_newton_step(&self, step: &mut [T]) -> usize {
         let mut nsing = self.nfree;
+        let mut s = vec![T::zero(); self.nfree];
+
         for j in 0..self.nfree {
-            solution[j] = self.qtf[j];
+            s[j] = self.qtf[j];
             if self.fjac[(j, j)] == T::zero() && nsing == self.nfree {
                 nsing = j;
             }
             if nsing < self.nfree {
-                solution[j] = T::zero();
+                s[j] = T::zero();
             }
         }
         for j in (0..nsing).rev() {
-            solution[j] /= self.fjac[(j, j)];
-            let z_j = solution[j];
+            s[j] /= self.fjac[(j, j)];
+            let s_j = s[j];
             for i in 0..j {
-                solution[i] -= self.fjac[self.m * j + i] * z_j;
+                s[i] -= self.fjac[self.m * j + i] * s_j;
             }
         }
         for j in 0..self.nfree {
-            step[self.ipvt[j]] = solution[j];
+            step[self.ipvt[j]] = s[j];
         }
         nsing
     }
