@@ -5,7 +5,7 @@ use eispec::components::rlc::Resistor;
 use eispec::components::Component;
 use eispec::data::ImpedanceDataError;
 use eispec::data::{ImpedanceData, ImpedanceDataAccessors};
-use eispec::fit::{ImpedanceModel, ModelParameter};
+use eispec::fit::{ImpedanceModel, ModelParameter, ParameterBounds};
 use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
@@ -33,10 +33,10 @@ fn main() {
     let mut data = ImpedanceDataWrap::from_csv("examples/simple_example_data.csv").unwrap();
 
     data.set_parameters(vec![
-        ModelParameter::new(10.0, true, Some(0.0), None),
-        ModelParameter::new(1.0e5, true, Some(0.0), None),
-        ModelParameter::new(0.1, true, Some(0.0), Some(1.0)),
-        ModelParameter::new(20.0, false, Some(10.0), None),
+        ModelParameter::new(10.0, true, ParameterBounds::positive()),
+        ModelParameter::new(1.0e5, true, ParameterBounds::positive()),
+        ModelParameter::new(0.1, true, ParameterBounds::zero_to_one()),
+        ModelParameter::new(20.0, false, ParameterBounds::minimum(10.0)),
     ]);
 
     let result = data.fit().unwrap();
@@ -46,7 +46,7 @@ fn main() {
 
     assert_eq!(result.n_par, 4);
     assert_eq!(result.n_free, 3);
-    assert_eq!(result.n_func, 15);
+    assert_eq!(result.n_func, 30);
 
     assert_approx_eq!(950.0, result.x[0], 0.2);
     assert_approx_eq!(33333.3, result.x[1], 50.0);

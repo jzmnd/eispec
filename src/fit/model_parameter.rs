@@ -1,4 +1,72 @@
+//!
+//! Model parameters and parameter bounds.
+//!
 use crate::constants::FloatConst;
+
+///
+/// Definition of lower/upper bounds on a parameter.
+///
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ParameterBounds<T> {
+    pub lower: Option<T>,
+    pub upper: Option<T>,
+}
+
+impl<T> Default for ParameterBounds<T> {
+    fn default() -> Self {
+        Self {
+            lower: None,
+            upper: None,
+        }
+    }
+}
+
+impl<T> ParameterBounds<T>
+where
+    T: FloatConst,
+{
+    pub fn positive() -> Self {
+        Self {
+            lower: Some(T::zero()),
+            upper: None,
+        }
+    }
+
+    pub fn negative() -> Self {
+        Self {
+            lower: None,
+            upper: Some(T::zero()),
+        }
+    }
+
+    pub fn zero_to_one() -> Self {
+        Self {
+            lower: Some(T::zero()),
+            upper: Some(T::one()),
+        }
+    }
+
+    pub fn maximum(m: T) -> Self {
+        Self {
+            lower: None,
+            upper: Some(m),
+        }
+    }
+
+    pub fn minimum(m: T) -> Self {
+        Self {
+            lower: Some(m),
+            upper: None,
+        }
+    }
+
+    pub fn between(lower: T, upper: T) -> Self {
+        Self {
+            lower: Some(lower),
+            upper: Some(upper),
+        }
+    }
+}
 
 ///
 /// Model parameter configurations.
@@ -9,22 +77,19 @@ pub struct ModelParameter<T> {
     pub init_value: T,
     /// Whether to fit the parameter or hold fixed
     pub fit: bool,
-    /// Lower limit on parameter, unbounded if None
-    pub limit_lower: Option<T>,
-    /// Upper limit on parameter, unbounded if None
-    pub limit_upper: Option<T>,
+    /// Lower/upper limits on parameter, unbounded if None
+    pub bounds: ParameterBounds<T>,
 }
 
 impl<T> ModelParameter<T>
 where
     T: FloatConst,
 {
-    pub fn new(init_value: T, fit: bool, limit_lower: Option<T>, limit_upper: Option<T>) -> Self {
+    pub fn new(init_value: T, fit: bool, bounds: ParameterBounds<T>) -> Self {
         Self {
             init_value,
             fit,
-            limit_lower,
-            limit_upper,
+            bounds,
         }
     }
 }

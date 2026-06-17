@@ -5,7 +5,7 @@
 use std::fmt;
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum MPFitInfo {
     /// Not finished iterations
     NotDone,
@@ -65,13 +65,4 @@ pub enum MPFitError {
     DoF,
     #[error("Error during user evaluation")]
     Eval,
-}
-
-pub enum MPFitDone {
-    /// Fit is complete, exit
-    Exit,
-    /// Fit is running the inner loop
-    Inner,
-    /// Fit is running the outer loop
-    Outer,
 }

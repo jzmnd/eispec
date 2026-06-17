@@ -4,7 +4,7 @@ use eispec::components::rlc::{Capacitor, Resistor};
 use eispec::components::Component;
 use eispec::data::ImpedanceDataError;
 use eispec::data::{ImpedanceData, ImpedanceDataAccessors};
-use eispec::fit::{ImpedanceModel, ModelParameter};
+use eispec::fit::{ImpedanceModel, ModelParameter, ParameterBounds};
 use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
@@ -31,9 +31,9 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 fn main() {
     let mut data = ImpedanceDataWrap::from_csv("examples/randles_example_data.csv").unwrap();
     data.set_parameters(vec![
-        ModelParameter::new(100.0, true, Some(0.0), None),
-        ModelParameter::new(2e-6, true, Some(0.0), None),
-        ModelParameter::new(500.0, true, Some(0.0), None),
+        ModelParameter::new(100.0, true, ParameterBounds::positive()),
+        ModelParameter::new(2e-6, true, ParameterBounds::positive()),
+        ModelParameter::new(500.0, true, ParameterBounds::positive()),
     ]);
 
     let result = data.fit().unwrap();
@@ -43,7 +43,7 @@ fn main() {
 
     assert_eq!(result.n_par, 3);
     assert_eq!(result.n_free, 3);
-    assert_eq!(result.n_func, 81);
+    assert_eq!(result.n_func, 162);
 
     assert_approx_eq!(200.0, result.x[0], 0.01);
     assert_approx_eq!(1e-6, result.x[1]);
