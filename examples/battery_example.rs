@@ -12,9 +12,9 @@ use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
 #[impl_impedance_data_accessors]
-struct ImpedanceDataWrap(ImpedanceData<f64>);
+struct BatteryData(ImpedanceData<f64>);
 
-impl ImpedanceModel<f64> for ImpedanceDataWrap {
+impl ImpedanceModel<f64> for BatteryData {
     fn model(&self, params: &[f64]) -> Box<dyn Component<f64>> {
         let r_bulk = Resistor::<f64>::new(params[0]);
 
@@ -61,7 +61,7 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 }
 
 fn main() {
-    let mut data = ImpedanceDataWrap::from_csv("examples/battery_example_data.csv").unwrap();
+    let mut data = BatteryData::from_csv("examples/battery_example_data.csv").unwrap();
     data.set_parameters(vec![
         ModelParameter::new(10.0, true, ParameterBounds::positive()),
         ModelParameter::new(100.0, true, ParameterBounds::positive()),

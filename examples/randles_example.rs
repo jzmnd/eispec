@@ -9,9 +9,9 @@ use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
 #[impl_impedance_data_accessors]
-struct ImpedanceDataWrap(ImpedanceData<f64>);
+struct RandlesData(ImpedanceData<f64>);
 
-impl ImpedanceModel<f64> for ImpedanceDataWrap {
+impl ImpedanceModel<f64> for RandlesData {
     fn model(&self, params: &[f64]) -> Box<dyn Component<f64>> {
         let rct = Resistor::<f64>::new(params[0]);
         let cdl = Capacitor::<f64>::new(params[1]);
@@ -29,7 +29,7 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 }
 
 fn main() {
-    let mut data = ImpedanceDataWrap::from_csv("examples/randles_example_data.csv").unwrap();
+    let mut data = RandlesData::from_csv("examples/randles_example_data.csv").unwrap();
     data.set_parameters(vec![
         ModelParameter::new(100.0, true, ParameterBounds::positive()),
         ModelParameter::new(2e-6, true, ParameterBounds::positive()),

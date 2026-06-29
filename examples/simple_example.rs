@@ -10,9 +10,9 @@ use eispec::impl_impedance_data_accessors;
 use eispec::newtypes::{Frequency, Impedance};
 
 #[impl_impedance_data_accessors]
-struct ImpedanceDataWrap(ImpedanceData<f64>);
+struct SimpleData(ImpedanceData<f64>);
 
-impl ImpedanceModel<f64> for ImpedanceDataWrap {
+impl ImpedanceModel<f64> for SimpleData {
     fn model(&self, params: &[f64]) -> Box<dyn Component<f64>> {
         let r1 = Resistor::<f64>::new(params[0]);
         let cpe = Cpe::<f64>::new(params[1], params[2]);
@@ -30,7 +30,7 @@ impl ImpedanceModel<f64> for ImpedanceDataWrap {
 }
 
 fn main() {
-    let mut data = ImpedanceDataWrap::from_csv("examples/simple_example_data.csv").unwrap();
+    let mut data = SimpleData::from_csv("examples/simple_example_data.csv").unwrap();
 
     data.set_parameters(vec![
         ModelParameter::new(10.0, true, ParameterBounds::positive()),
